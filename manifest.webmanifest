@@ -1,0 +1,16 @@
+{
+  "name": "Servicios a bordo",
+  "short_name": "Servicios",
+  "description": "Lee el MOL, coloca a cada pasajero en su asiento y comparte el servicio con tu compañero.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07111F",
+  "theme_color": "#07111F",
+  "icons": [
+    { "src": "icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
