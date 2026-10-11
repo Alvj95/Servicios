@@ -15,3 +15,4 @@ con TrenTurnos y otro con esta versión pueden pasárselo entre ellos.
 
 ## Publicar
 Settings → Pages → «Deploy from a branch» → `main` / `(root)` → Save.
+Cada vez que se sube un cambio a `main`, la página se actualiza sola en 1–2 minutos.
