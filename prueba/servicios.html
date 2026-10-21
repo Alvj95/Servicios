@@ -384,7 +384,7 @@ button{font-family:inherit}
 #p-tren.sx-oculto .card{background:none;border:0;padding:0;box-shadow:none;margin:0}
 #p-tren.sx-oculto .pdf{border:0;padding:0;background:none;min-height:0}
 /* mapa */
-#p-mapa.sx-oculto #plano-info,#p-mapa.sx-oculto #est-mapa,#p-mapa.sx-oculto #sum,#p-mapa.sx-oculto #clipbar,#p-mapa.sx-oculto #legend,#p-mapa.sx-oculto #coches{display:none!important}
+#p-mapa.sx-oculto #plano-info,#p-mapa.sx-oculto #est-mapa,#p-mapa.sx-oculto #sum,#p-mapa.sx-oculto #clipbar,#p-mapa.sx-oculto #legend{display:none!important}
 .sx-coche{display:flex;align-items:center;justify-content:space-between;background:#132236;border-radius:18px;padding:8px;margin-bottom:10px;border:2px solid #2a4466;position:sticky;top:0;z-index:7}
 .sx-coche button{width:58px;height:58px;border-radius:14px;background:#1E293B;border:0;color:#fff;font-size:28px;font-weight:900;cursor:pointer}
 .sx-coche .c{text-align:center;font-size:26px;font-weight:900}.sx-coche .c small{display:block;font-size:13px;color:#CBD5E1;font-weight:700}
@@ -453,6 +453,14 @@ button{font-family:inherit}
 .sx-aviso2{background:#7c2d12;border:2px solid #F59E0B;border-radius:16px;padding:12px;font-size:15px;font-weight:700;line-height:1.45;margin-bottom:12px}
 .sx-mini2{display:flex;gap:6px;margin-top:10px}.sx-mini2 div{flex:1;border-radius:12px;padding:8px;font-size:12px;font-weight:900;color:#fff;text-align:center}.sx-mini2 b{display:block;font-size:22px}
 #p-mapa .seat .tr{font-size:8px}
+/* fila de coches como antes, un poco más grande; y comprobar quién sube */
+#p-mapa #coches{position:sticky;top:0;z-index:6;background:var(--bg);padding-bottom:6px}
+#p-mapa #coches .coche{min-width:58px;padding:7px 4px}
+#p-mapa #coches .coche .n{font-size:20px}#p-mapa #coches .coche .k{font-size:12px;font-weight:900;color:#FCD34D}
+.sx-clip{display:block;width:100%;text-align:left;border-radius:16px;padding:12px 14px;margin:8px 0 10px;font:900 17px Inter,sans-serif;background:#1E293B;color:#E2E8F0;border:2.5px solid #334155;cursor:pointer}
+.sx-clip b{color:#94A3B8}.sx-clip small{display:block;font-size:12.5px;font-weight:700;color:#CBD5E1;margin-top:3px}
+.sx-clip.on{background:#14532D;border-color:#4ADE80}.sx-clip.on b{color:#86EFAC}
+.sx-lleg{padding:12px 14px;font-size:17px;margin:4px 0 10px}.sx-lleg span{font-size:24px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -2643,6 +2651,7 @@ function sxSeatsPost(){
     if(sv.length&&!editando){
       if(!viv.length) b.insertAdjacentHTML('beforeend','<span class="sx-t">NO SUBIÓ</span>');
       else if(!pend.length){ b.classList.add('sx-ok'); b.insertAdjacentHTML('beforeend','<span class="sx-t">✓ HECHO</span>'); }
+      else if(pend.some(function(r){ return subio[r.sid]==='si'; })) b.insertAdjacentHTML('beforeend','<span class="sx-t">🧍 SUBIÓ</span>');
     }
     if(SX.falta&&!editando&&!pend.length) b.classList.add('dim');
   });
@@ -2652,12 +2661,14 @@ function sxMapa(){
   pm.classList.toggle('sx-oculto', !SX.mas);
   var enC=LISTA.filter(function(r){ return r.coche===coche; }), falta=enC.filter(function(r){ return !servidos[r.sid]&&subio[r.sid]!=='no'; }).length;
   var editando=MANUAL&&MANUAL.editando;
-  var h='<div class="sx-coche"><button onclick="sxCoche(-1)">◀</button><div class="c">Coche '+cocheVer(coche)+(esAcop(coche)?' <small style="display:inline;color:#7DD3FC">🔗</small>':'')+
-    '<small>'+(editando?enC.length+' puestos':falta?'faltan '+falta+' por servir':'✓ todo servido')+'</small></div><button onclick="sxCoche(1)">▶</button></div>'+
-    (editando?'<button class="sx-mini" onclick="abrirAnadirCoche()">＋ Añadir otro coche</button>':
+  var P=sxParadas(), sig=P[Math.min(sxParadaIdx(), Math.max(P.length-1,0))+1];
+  var h=(editando?'':
+      '<button class="sx-clip'+(modoClip?' on':'')+'" onclick="modoClip=!modoClip;pintarMapa()">🧍 Comprobar quién sube: <b>'+(modoClip?'SÍ':'NO')+'</b>'+
+        '<small>'+(modoClip?'Toca un asiento: 1 vez ✓ subió · 2 veces 🚫 no subió · 3 veces sin comprobar':'Actívalo cuando te dicten los asientos: marcas de un toque')+'</small></button>'+
       '<div class="sx-tog"><button class="'+(SX.falta?'on':'')+'" onclick="SX.falta=true;pintarMapa()">Lo que falta</button><button class="'+(!SX.falta?'on':'')+'" onclick="SX.falta=false;pintarMapa()">Todos</button></div>')+
-    sxMapaDos()+(estFiltro.est?'<div class="sx-aviso">🚉 Solo los que '+(estFiltro.modo==='sube'?'suben':'bajan')+' en <b>'+limpio(estCorto(estFiltro.est))+'</b> <button onclick="setEst(estFiltro.modo,null)">Ver todos</button></div>':'');
-  sxEl('sx-mapa', co, h);
+    sxMapaDos()+(estFiltro.est?'<div class="sx-aviso">🚉 Solo los que '+(estFiltro.modo==='sube'?'suben':'bajan')+' en <b>'+limpio(estCorto(estFiltro.est))+'</b> <button onclick="setEst(estFiltro.modo,null)">Ver todos</button></div>':'')+
+    (!editando&&sig?'<button class="sx-gbtn sx-az sx-lleg" onclick="sxLlegamos()"><span>🚉</span><div>Llegamos a '+limpio(estCorto(sig))+'<small>Toca al llegar a la parada</small></div></button>':'');
+  sxEl('sx-mapa', co.nextElementSibling, h);
   var mb=document.getElementById('sx-mapa-mas'); if(!mb){ mb=document.createElement('button'); mb.id='sx-mapa-mas'; mb.className='sx-mas'; pm.appendChild(mb); }
   mb.textContent=SX.mas?'▲ Menos opciones':'⚙️ Más opciones (filtros, embarque, plano…)'; mb.onclick=function(){ SX.mas=!SX.mas; pintarMapa(); };
   sxSeatsPost(); sxSeatsDos();
@@ -2905,6 +2916,22 @@ function sxSeatsDos(){
     } else if(tr&&(ks[0]||ks[1])){ var r=ks[0]||ks[1]; tr.textContent=sxN(r.k)+' '+sigla(r.origen)+'›'+sigla(r.destino); }
   });
 }
+
+/* ── Comprobar quién sube: un toque por asiento, sin abrir nada ── */
+var _tocarOrig=tocarAsiento;
+tocarAsiento=function(key){
+  if(!modoClip||MOVIENDO!==null||(MANUAL&&MANUAL.editando)) return _tocarOrig(key);
+  var todas=(ASIENTOS[key]||[]).filter(pasaEst), sv=filtro?todas.filter(function(r){ return r.k===filtro; }):todas;
+  if(!sv.length) sv=todas;
+  if(sv.length!==1) return _tocarOrig(key);
+  var r=sv[0], grupo=[r];
+  // la misma persona en el otro servicio (sigue en el mismo asiento justo donde cambia)
+  todas.forEach(function(x){ if(x!==r&&x.manual&&(x.origen===r.destino||x.destino===r.origen)) grupo.push(x); });
+  var s0=subio[r.sid], v=!s0?'si':s0==='si'?'no':null;
+  grupo.forEach(function(x){ if(v){ subio[x.sid]=v; if(v==='no') delete servidos[x.sid]; } else delete subio[x.sid]; anotar(x.sid); });
+  toast('Asiento '+key.split('-')[1]+': '+(v==='si'?'🧍 subió':v==='no'?'🚫 no subió':'❔ sin comprobar'));
+  guardar(); pintarMapa();
+};
 
 /* ── Enganches ── */
 var _pintarMapaOrig=pintarMapa;
