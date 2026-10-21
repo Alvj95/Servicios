@@ -469,8 +469,10 @@ button{font-family:inherit}
 .sx-antes summary small{display:block;font-size:12.5px;font-weight:700;color:#94A3B8;margin-top:2px}
 .sx-antes[open]{padding-bottom:10px}
 .sx-mover{display:block;width:100%;margin-top:8px;background:#1E293B;border:2.5px solid #60A5FA;color:#BFDBFE;border-radius:16px;padding:13px;font:900 17px Inter,sans-serif;cursor:pointer}
-/* ═══ Secuencia operativa (copia de prueba) ═══ */
-.sq-hbtn{width:auto!important;padding:0 10px!important;background:#7C3AED!important;color:#fff!important;font:900 12.5px Inter,sans-serif!important;border:2px solid #C4B5FD!important;white-space:nowrap}
+/* ═══ Secuencia operativa ═══ */
+.sq-hbtn{position:relative;background:#4C1D95!important;border:2px solid #A78BFA!important}
+.sq-hbtn i{position:absolute;bottom:-13px;left:50%;transform:translateX(-50%);font:900 7.5px Inter,sans-serif;font-style:normal;color:#C4B5FD;letter-spacing:.3px;white-space:nowrap;pointer-events:none}
+#tema-btn{display:none!important} /* el estilo de temporada está en «Más opciones» */
 .sq-mo{background:#7C3AED;color:#fff}
 .sq-tren{background:#132236;border:2px solid #2a4466;border-radius:16px;padding:12px;margin-bottom:10px}
 .sq-tren .n{font-size:23px;font-weight:900}.sq-tren .n small{font-size:13px;color:#CBD5E1}.sq-tren .r{font-size:14px;color:#CBD5E1;margin-top:2px}
@@ -2265,7 +2267,7 @@ function cerrar(){
    en este móvil para no perderlo si se cierra la app. Lleva nombres de
    clientes, así que se borra solo a los 2 días de haberlo cargado,
    o antes con "Borrar y empezar otro servicio". No se envía a ningún sitio. */
-var CLAVE='trenturnosServiciosAbordoPRUEBA', CARGADO_EN=0; // copia de prueba: se guarda aparte
+var CLAVE='trenturnosServiciosAbordoPRUEBA', CARGADO_EN=0;
 function guardar(){
   if(!cargado) return;
   try{ localStorage.setItem(CLAVE, JSON.stringify({v:1, lista:LISTA, servidos:servidos, subio:subio, tipo:tipo, serie:serie,
@@ -2999,7 +3001,7 @@ goP=function(p){ _goPOrig(p); if(p==='tren') sxInicio(); };
 var _montarOrig=montar; montar=function(l){ sxNombresSv(); _montarOrig(l); sxInicio(); };
 setTimeout(function(){ sxInicio(); if(document.getElementById('p-mapa').classList.contains('on')) pintarMapa(); }, 60);
 
-/* ═══ Secuencia operativa (copia de prueba) ═══
+/* ═══ Secuencia operativa ═══
    Las fichas de secuencia de cada tren van guardadas aquí, por número de tren.
    Con el nº de tren (del MOL o puesto a mano) la app sabe sus paradas, qué le toca
    a cada pasajero según dónde sube y baja (la pirámide), y qué hay que hacer en
@@ -3163,15 +3165,24 @@ function sqNum2(v){ v=String(v||'').replace(/\D/g,'').slice(0,5); var Q=sqDe(v),
 function sqAbrirTren(n){ var o=sqSolo(); if(o.tren!==n) o={tren:n, k:0}; sqSoloPon(o); SQ.tab='ahora'; hoja='sq'; pintarSecuencia(); }
 
 /* ── Botón arriba y en el inicio ── */
+// En Solo Servicios no hay botón arriba: la secuencia se abre desde el inicio.
+var SV_SOLO=false; try{ SV_SOLO=parent!==window&&typeof parent.SERVICIOS_HTML==='undefined'; }catch(e){}
 function sqBoton(){
-  var Q=sqActual(), pb=document.getElementById('perfil-btn'); if(!pb) return;
+  var Q=SV_SOLO?null:sqActual(), pb=document.getElementById('perfil-btn'); if(!pb) return;
   var b=document.getElementById('sq-btn');
   if(!Q){ if(b) b.remove(); return; }
-  if(!b){ b=document.createElement('button'); b.id='sq-btn'; b.className='hbtn sq-hbtn'; b.onclick=function(){ abrirSecuencia('ahora'); }; pb.parentNode.insertBefore(b, pb.parentNode.firstChild); }
-  b.textContent='📋 Secuencia';
+  if(!b){ b=document.createElement('button'); b.id='sq-btn'; b.className='hbtn sq-hbtn'; b.title='Secuencia operativa'; b.onclick=function(){ abrirSecuencia('ahora'); }; pb.parentNode.insertBefore(b, pb.parentNode.firstChild); }
+  b.innerHTML='📋<i>SECUENCIA</i>';
 }
 var _sqInicio=sxInicio;
-sxInicio=function(){ _sqInicio(); sqBoton(); var Q=sqActual(), el=document.getElementById('sx-inicio');
+// El estilo de temporada (antes, el botón 🎃 de arriba) va en «Más opciones».
+function sqEstilo(el){
+  var tb=document.getElementById('tema-btn'), vie=document.getElementById('sq-estilo'); if(vie) vie.remove();
+  if(!SX.mas||!tb||!tb.classList.contains('on')) return;
+  var cur=document.querySelector('#tema-panel .cur b'), mas=el.querySelector('.sx-mas');
+  if(mas) mas.insertAdjacentHTML('afterend','<button id="sq-estilo" class="sq-trenb" onclick="temaPanel()"><span style="font-size:26px">🎨</span><div><b style="font-size:17px">Estilo de temporada</b><small>Ahora: '+limpio(tb.textContent)+' '+limpio(cur?cur.textContent:'')+' · toca para cambiarlo</small></div><i>›</i></button>');
+}
+sxInicio=function(){ _sqInicio(); sqBoton(); var Q=sqActual(), el=document.getElementById('sx-inicio'); if(el) sqEstilo(el);
   if(el&&!cargado){ var gr=el.querySelector('.sx-gr'), o=sqSolo(), Qs=sqDe(o.tren);
     var vie=document.getElementById('sq-home'); if(vie) vie.remove();
     if(gr) gr.insertAdjacentHTML('afterend','<button id="sq-home" class="sx-gbtn sq-mo" onclick="'+(Qs?'sqAbrirTren(\''+Qs.tren+'\');document.getElementById(\'ov-asiento\').classList.add(\'on\')':'sqElegir()')+'"><span>📋</span><div>Secuencia operativa<small>'+(Qs?'Tren '+Qs.tren+' · vamos por: '+limpio(sqVamos(Qs.bloques[Math.min(o.k||0,Qs.bloques.length-1)])):'Qué hay que hacer en cada parada')+'</small></div></button>'); return; }
@@ -3184,9 +3195,11 @@ var _sqMapa=sxMapa; sxMapa=function(){ _sqMapa(); sqBoton(); };
 var _sqSetup=pintarSetup;
 pintarSetup=function(){
   if(SX.paso===1&&SETUP.seqOk) return sqResumenSetup();
+  var sh=document.getElementById('sh-asiento'), b0=sh.querySelector('.sh-body'), y=(b0&&sh.dataset.hoja==='manual'&&SX.pasoVisto===SX.paso)?b0.scrollTop:0;
   _sqSetup();
   if(SX.paso!==1) return;
   var body=document.querySelector('#sh-asiento .sh-body'), q=body&&body.querySelector('.sx-q'); if(!q) return;
+  setTimeout(function(){ if(y) body.scrollTop=y; }); // el recuadro del nº de tren va arriba: la hoja no se mueve al tocar
   q.insertAdjacentHTML('afterend','<div class="sq-num"><div class="f-lbl">🔢 Nº de tren (si lo sabes)</div><input class="inp" id="sq-num" inputmode="numeric" placeholder="p. ej. 3933" value="'+limpio(SETUP.num||'')+'" oninput="sqNum(this.value)"><div id="sq-card"></div></div>');
   sqNum(SETUP.num||'', true);
 };
@@ -3290,6 +3303,9 @@ ficha=function(key){
     var T=sqTipo(Q,s,b), base=String(r.k).replace(/2$/,''), dif=T&&SQ_TIPO[T].k!==base&&base!=='box';
     c.insertAdjacentHTML('afterend','<div class="sq-ficha"><div class="t">📋 Según la secuencia del '+Q.tren+':</div>'+(dif?'<div class="sx-alerta" style="margin:4px 0">⚠️ Le toca '+SQ_TIPO[T].n.toLowerCase()+', no '+limpio(COMIDAS[r.k].n.toLowerCase())+'</div>':'')+sqListaHTML(Q,s,b,true)+'</div>'); });
 };
+// MOL de un tren con secuencia guardada: el tipo y la serie salen de la secuencia (p. ej. 3933 → AVE S-102).
+var _sqComp=mostrarComprobacion;
+mostrarComprobacion=function(){ _sqComp.apply(this, arguments); var Q=sqDe(valor('i-num')); if(Q&&(tipo!==Q.tipo||serie!==Q.serie)){ tipo=Q.tipo; serie=Q.serie; try{ pintarTipos(); }catch(e){} } };
 setTimeout(sqBoton, 120);
 
 // Al cerrar la secuencia, el inicio se pone al día (tren y parada).
