@@ -495,6 +495,10 @@ button{font-family:inherit}
 .sq-st .n{font-size:16px;font-weight:900}.sq-st .n i{font-style:normal;color:#FCD34D;margin-right:7px}.sq-st.yo .n{color:#FCD34D}
 .sq-num{margin:4px 0 12px}.sq-ok{background:#14532D;border:2px solid #4ADE80;border-radius:14px;padding:12px;margin-top:8px;font-size:14.5px;line-height:1.45}.sq-ok span{font-size:12.5px;color:#BBF7D0}
 .sq-ficha{background:#132236;border:2px dashed #7C3AED;border-radius:14px;padding:8px 10px;margin:-2px 0 8px}.sq-ficha .t{font-size:12.5px;font-weight:900;color:#C4B5FD}
+.sq-mo{border:2px solid #C4B5FD!important}
+.sq-trenb{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#132236;border:2px solid #2a4466;border-radius:16px;padding:12px;margin-bottom:8px;color:#F8FAFC;font:inherit;cursor:pointer}
+.sq-trenb b{font-size:20px}.sq-trenb small{display:block;font-size:13px;color:#CBD5E1;font-weight:700;margin:2px 0 4px}.sq-trenb i{margin-left:auto;font-style:normal;font-size:22px;color:#94A3B8}
+.sq-tag{display:inline-block;border-radius:7px;padding:2px 7px;font-size:11px;font-weight:900;margin-right:4px;color:#fff}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -3053,11 +3057,14 @@ var SECUENCIAS={
   notas:['Una posible demora en el estacionamiento previsto del tren en el andén podría retrasar el inicio del servicio a bordo.','*Mensaje PlayRenfe se emitirá tras confirmación del SSB/OC del correcto funcionamiento del sistema.']
  }
 };
-var SQ_TIPO={D:{n:'Desayuno',e:'🥐',c:'#EA580C',k:'des'}, AP:{n:'Aperitivo',e:'🥨',c:'#2563EB',k:'ape'}, C:{n:'Cortesía',e:'🍪',c:'#475569',k:'cor'}, BD:{n:'Copa de bienvenida/despedida',e:'🥂',c:'#7C3AED'}, L:{n:'Licores',e:'🥃',c:'#0F766E'}};
+var SQ_TIPO={D:{n:'Desayuno',e:'🥐',c:'#EA580C',k:'des'}, AP:{n:'Aperitivo',e:'🥨',c:'#2563EB',k:'ape'}, C:{n:'Cortesía',e:'🍪',c:'#475569',k:'cor'}, BD:{n:'Copa de bienvenida/despedida',e:'🥂',c:'#7C3AED'}, L:{n:'Licores',e:'🥃',c:'#0F766E'}, BM:{n:'Bar móvil',e:'🛒',c:'#0D9488'}};
 var SQ={tab:'ahora', todo:false, s:0, b:null};
 if(!MENUS_MAN.cor) MENUS_MAN.cor=['Cortesía'];
 function sqDe(num){ num=String(num||'').replace(/\D/g,''); return SECUENCIAS[num]||null; }
-function sqActual(){ return sqDe(MANUAL&&MANUAL.seq||valor('i-num')); }
+function sqActual(){ return cargado?sqDe(MANUAL&&MANUAL.seq||valor('i-num')):sqDe(sqSolo().tren); }
+// Secuencia abierta desde el inicio, sin MOL: qué tren y en qué parada vamos (se guarda en el móvil).
+function sqSolo(){ try{ return JSON.parse(localStorage.getItem(CLAVE+'_sq')||'{}')||{}; }catch(e){ return {}; } }
+function sqSoloPon(o){ try{ localStorage.setItem(CLAVE+'_sq', JSON.stringify(o)); }catch(e){} }
 function sqIdx(Q, nombre){ var n=estacion(nombre).nombre; for(var i=0;i<Q.paradas.length;i++) if(estacion(Q.paradas[i][0]).nombre===n) return i; return -1; }
 function sqCorto(Q,i){ return estCorto(Q.paradas[i][0]); }
 function sqTipo(Q,s,b){ var f=Q.pir[s]; return f&&b>s?f[b-s-1]||null:null; }
@@ -3086,11 +3093,12 @@ function sqListaHTML(Q,s,b,compacto){
 /* ── La hoja «Secuencia» ── */
 function abrirSecuencia(tab){ var Q=sqActual(); if(!Q) return; if(tab) SQ.tab=tab; hoja='sq'; fichaAbierta=null; pintarSecuencia(); document.getElementById('ov-asiento').classList.add('on'); }
 function sqBloqueAhora(Q){
-  if(!cargado) return 0; var P=sxParadas(), e=P[Math.min(sxParadaIdx(),P.length-1)], i=e?sqIdx(Q,e):-1;
+  if(!cargado) return Math.min(sqSolo().k||0, Q.bloques.length-1); var P=sxParadas(), e=P[Math.min(sxParadaIdx(),P.length-1)], i=e?sqIdx(Q,e):-1;
   if(i<0) return 0; for(var k=0;k<Q.bloques.length;k++) if(Q.bloques[k].est===i) return k; return 0;
 }
 function sqOps(bl){ return bl.ops.filter(function(o){ return SQ.todo||/TA/.test(o[1]); }); }
-function sqOpHTML(o){ var t=o[3]&&SQ_TIPO[o[3]];
+function sqDestaca(o){ return o[3]||/bar m[oó]vil/i.test(o[0]); }
+function sqOpHTML(o){ var t=o[3]?SQ_TIPO[o[3]]:/bar m[oó]vil/i.test(o[0])?SQ_TIPO.BM:null;
   return t?'<div class="sq-op r" style="border-color:'+t.c+';background:'+t.c+'33"><b>'+t.e+' '+limpio(o[0])+'</b><span>'+o[1]+' · '+o[2]+'</span></div>'
           :'<div class="sq-op"><span class="tx">'+limpio(o[0])+'</span><span>'+o[1]+' · '+o[2]+'</span></div>'; }
 function pintarSecuencia(){
@@ -3099,13 +3107,15 @@ function pintarSecuencia(){
     '<div class="sq-tren"><div class="n">'+Q.tipo+' '+Q.tren+' <small>· '+Q.serie+' · '+Q.dur+'</small></div><div class="r">'+limpio(Q.ruta)+' · '+Q.paradas[0][1]+' → '+Q.paradas[Q.paradas.length-1][1]+'</div>'+
     '<div class="sq-chips">'+Q.lleva.map(function(x){ return '<span class="'+(x[2]?'':'no')+'">'+x[0]+' '+x[1]+'</span>'; }).join('')+'</div>'+
     '<div class="sq-chips"><span>'+Q.trip+'</span><span>'+Q.megafonia+'</span></div><div class="r" style="font-size:11.5px;margin-top:4px">'+Q.dias+' · '+Q.rev+'</div></div>'+
-    '<div class="sx-tog sq-tabs">'+[['ahora','Ahora'],['toca','¿Qué le toca?'],['paradas','Paradas']].map(function(t){ return '<button class="'+(SQ.tab===t[0]?'on':'')+'" onclick="SQ.tab=\''+t[0]+'\';pintarSecuencia()">'+t[1]+'</button>'; }).join('')+'</div>';
+    '<div class="sx-tog sq-tabs">'+[['ahora','Ahora'],['toca','¿Qué le toca?'],['paradas','Paradas']].filter(function(t){ return t[0]!=='toca'||Q.pir; }).map(function(t){ return '<button class="'+(SQ.tab===t[0]?'on':'')+'" onclick="SQ.tab=\''+t[0]+'\';pintarSecuencia()">'+t[1]+'</button>'; }).join('')+'</div>';
+  if(SQ.tab==='toca'&&!Q.pir) SQ.tab='ahora';
   if(SQ.tab==='ahora'){
     var k=sqBloqueAhora(Q), bl=Q.bloques[k], sig=Q.bloques[k+1];
     h+='<div class="sq-ahora">🚉 '+(bl.est===null?'Antes de salir':bl.est===0?'Saliendo de <b>'+limpio(sqCorto(Q,0))+' · '+bl.h+'</b>':'Después de <b>'+limpio(bl.t)+' · '+bl.h+'</b>')+(sig?'<br><span>Próxima: '+limpio(sig.t)+' · '+sig.h+'</span>':'')+'</div>'+
-      '<div class="sx-q" style="font-size:17px">Qué toca hacer ahora:</div>'+sqOps(bl).filter(function(o){ return o[3]; }).map(sqOpHTML).join('')+
-      '<div class="sq-mas">También: '+sqOps(bl).filter(function(o){ return !o[3]; }).map(function(o){ return limpio(o[0].replace(/\s*\(.*\)/,'')).toLowerCase(); }).join(' · ')+'</div>'+
-      (cargado?'':'<div class="sq-mas">💡 Cuando el servicio esté en marcha, «Llegamos a…» va moviendo esta pantalla de parada en parada.</div>');
+      '<div class="sx-q" style="font-size:17px">Qué toca hacer ahora:</div>'+(sqOps(bl).some(sqDestaca)?sqOps(bl).filter(sqDestaca).map(sqOpHTML).join('')+
+      '<div class="sq-mas">También: '+sqOps(bl).filter(function(o){ return !sqDestaca(o); }).map(function(o){ return limpio(o[0].replace(/\s*\(.*\)/,'')).toLowerCase(); }).join(' · ')+'</div>':sqOps(bl).map(sqOpHTML).join(''))+
+      (cargado?'':(sig?'<button class="sx-gbtn sx-az sx-lleg" onclick="sqSiguiente(1)"><span>🚉</span><div>'+limpio(sqPaso(sig))+'<small>Toca al llegar · pasa a lo siguiente</small></div></button>':'<div class="sq-ahora" style="background:#14532D;border-color:#4ADE80">🏁 Final del recorrido</div>')+
+        (k>0?'<button class="sx-mas" onclick="sqSiguiente(-1)">‹ Volver a lo anterior</button>':'')+'<button class="sx-mas" onclick="sqElegir()">🔁 Cambiar de tren</button>');
   } else if(SQ.tab==='toca'){
     var n=Q.paradas.length, s=SQ.s, b=SQ.b==null||SQ.b<=s?n-1:SQ.b, su='', ba='', i;
     for(i=0;i<n-1;i++) su+='<button class="'+(i===s?'s':'')+'" onclick="SQ.s='+i+';if(SQ.b!=null&&SQ.b<='+i+')SQ.b=null;pintarSecuencia()">'+limpio(sqCorto(Q,i))+'</button>';
@@ -3132,6 +3142,26 @@ function sqPiramide(Q){
   return h+'</div>';
 }
 
+function sqVamos(bl){ return bl.est===null?bl.t.toLowerCase():bl.t.replace('Salida de ','').replace('Llegada a ',''); }
+function sqPaso(bl){ return bl.est===null?'Siguiente: '+bl.t:bl.est===0?'Salimos de '+bl.t.replace('Salida de ',''):'Llegamos a '+bl.t.replace('Llegada a ',''); }
+function sqSiguiente(d){ var o=sqSolo(), Q=sqDe(o.tren); if(!Q) return; o.k=Math.max(0,Math.min(Q.bloques.length-1,(o.k||0)+d)); sqSoloPon(o); pintarSecuencia(); }
+// Elegir el tren (desde el inicio, sin MOL)
+function sqElegir(){ hoja='sq-elegir'; fichaAbierta=null; SQ.num=''; sqPintaElegir(); document.getElementById('ov-asiento').classList.add('on'); }
+function sqPintaElegir(){
+  var trenes=Object.keys(SECUENCIAS).map(function(n){ var Q=SECUENCIAS[n], t={};
+    Q.bloques.forEach(function(b){ b.ops.forEach(function(o){ if(o[3]&&o[3]!=='BD'&&o[3]!=='L') t[o[3]]=1; }); });
+    var et=Object.keys(t).length?['D','AP'].filter(function(x){ return t[x]; }).map(function(x){ return '<span class="sq-tag" style="background:'+SQ_TIPO[x].c+'">'+SQ_TIPO[x].e+' '+SQ_TIPO[x].n+'</span>'; }).join(''):'<span class="sq-tag" style="background:#334155">🛒 Sin restauración</span>';
+    return '<button class="sq-trenb" onclick="sqAbrirTren(\''+n+'\')"><div><b>'+n+'</b> · '+Q.serie+'<small>'+limpio(estCorto(Q.paradas[0][0]))+' '+Q.paradas[0][1]+' → '+limpio(estCorto(Q.paradas[Q.paradas.length-1][0]))+' '+Q.paradas[Q.paradas.length-1][1]+'</small>'+et+'</div><i>›</i></button>'; }).join('');
+  sxPon('<div class="sh-handle"></div><div class="sx-hoja"><div class="sx-as" style="font-size:25px">¿Qué tren llevas?</div>'+
+    '<div class="f-lbl">🔢 Nº de tren</div><input class="inp" id="sq-num2" inputmode="numeric" placeholder="p. ej. 3933" oninput="sqNum2(this.value)" style="font-size:22px;font-weight:900;letter-spacing:2px"><div id="sq-card2"></div>'+
+    '<div class="sx-q" style="font-size:16px;margin-top:16px">🚆 Trenes guardados</div>'+trenes+
+    '<div class="sq-mas">Cuando me pases más fichas de secuencia, aparecerán aquí.</div><button class="sx-cerrar" onclick="cerrar()">Cerrar</button></div>','sq-elegir');
+}
+function sqNum2(v){ v=String(v||'').replace(/\D/g,'').slice(0,5); var Q=sqDe(v), c=document.getElementById('sq-card2'); if(!c) return;
+  c.innerHTML=Q?'<div class="sq-ok">✅ <b>Tengo la secuencia del '+Q.tren+'</b><br>'+limpio(Q.ruta)+' · '+Q.serie+'<button class="sx-gbtn sq-mo" style="margin:10px 0 0;padding:12px 14px;font-size:17px" onclick="sqAbrirTren(\''+Q.tren+'\')"><span>📋</span><div>Ver la secuencia</div></button></div>'
+    :(v.length>=4?'<div class="sq-mas">Todavía no tengo la secuencia de este tren. Pásame la ficha y la añado.</div>':''); }
+function sqAbrirTren(n){ var o=sqSolo(); if(o.tren!==n) o={tren:n, k:0}; sqSoloPon(o); SQ.tab='ahora'; hoja='sq'; pintarSecuencia(); }
+
 /* ── Botón arriba y en el inicio ── */
 function sqBoton(){
   var Q=sqActual(), pb=document.getElementById('perfil-btn'); if(!pb) return;
@@ -3141,7 +3171,11 @@ function sqBoton(){
   b.textContent='📋 Secuencia';
 }
 var _sqInicio=sxInicio;
-sxInicio=function(){ _sqInicio(); sqBoton(); var Q=sqActual(), el=document.getElementById('sx-inicio'); if(!Q||!el||!cargado) return;
+sxInicio=function(){ _sqInicio(); sqBoton(); var Q=sqActual(), el=document.getElementById('sx-inicio');
+  if(el&&!cargado){ var gr=el.querySelector('.sx-gr'), o=sqSolo(), Qs=sqDe(o.tren);
+    var vie=document.getElementById('sq-home'); if(vie) vie.remove();
+    if(gr) gr.insertAdjacentHTML('afterend','<button id="sq-home" class="sx-gbtn sq-mo" onclick="'+(Qs?'sqAbrirTren(\''+Qs.tren+'\');document.getElementById(\'ov-asiento\').classList.add(\'on\')':'sqElegir()')+'"><span>📋</span><div>Secuencia operativa<small>'+(Qs?'Tren '+Qs.tren+' · vamos por: '+limpio(sqVamos(Qs.bloques[Math.min(o.k||0,Qs.bloques.length-1)])):'Qué hay que hacer en cada parada')+'</small></div></button>'); return; }
+  if(!Q||!el||!cargado) return;
   var k=sqBloqueAhora(Q), bl=Q.bloques[k];
   var bt=el.querySelector('.sx-or'); if(bt&&!document.getElementById('sq-ini')) bt.insertAdjacentHTML('beforebegin','<button id="sq-ini" class="sx-gbtn sq-mo" onclick="abrirSecuencia(\'ahora\')"><span>📋</span><div>Ver la secuencia<small>Qué toca en cada parada · ahora: '+limpio(bl.est===null?'antes de salir':bl.t)+'</small></div></button>'); };
 var _sqMapa=sxMapa; sxMapa=function(){ _sqMapa(); sqBoton(); };
@@ -3257,6 +3291,9 @@ ficha=function(key){
     c.insertAdjacentHTML('afterend','<div class="sq-ficha"><div class="t">📋 Según la secuencia del '+Q.tren+':</div>'+(dif?'<div class="sx-alerta" style="margin:4px 0">⚠️ Le toca '+SQ_TIPO[T].n.toLowerCase()+', no '+limpio(COMIDAS[r.k].n.toLowerCase())+'</div>':'')+sqListaHTML(Q,s,b,true)+'</div>'); });
 };
 setTimeout(sqBoton, 120);
+
+// Al cerrar la secuencia, el inicio se pone al día (tren y parada).
+var _sqCerrar=cerrar; cerrar=function(){ var era=hoja; _sqCerrar(); if(!cargado&&/^sq/.test(era||'')) sxInicio(); };
 
 restaurar();
 /* «Desliza hacia abajo para actualizar», también dentro de Servicios: el gesto lo pinta y lo
