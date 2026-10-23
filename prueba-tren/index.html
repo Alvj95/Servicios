@@ -37574,13 +37574,18 @@ function mtRet(n){ return (mtG().ret||{})[rK(n)]; }
 function mtRetPon(n,min){ var o=mtG(); o.ret=o.ret||{}; if(min==null) delete o.ret[rK(n)]; else o.ret[rK(n)]={m:min, t:Date.now()}; mtP(o); }
 function mtReciente(n){ var o=mtG(); o.rec=[num(n)].concat((o.rec||[]).filter(function(x){ return x!==num(n); })).slice(0,6); mtP(o); }
 // Directo de Renfe (se guarda 25 s para no pedirlo a cada toque)
+var MT_PROXY='https://xoftsdupynwhzxsiusox.supabase.co/functions/v1/renfe-directo';
+function mtPide(url){ var ctl=window.AbortController?new AbortController():null, to=setTimeout(function(){ if(ctl) ctl.abort(); },9000);
+  return fetch(url, ctl?{signal:ctl.signal, cache:'no-store'}:{cache:'no-store'}).then(function(r){ clearTimeout(to); if(!r.ok) throw new Error(r.status===404?'falta el intermediario':'HTTP '+r.status); return r.json(); })
+    .then(function(j){ if(j&&j.error) throw new Error(j.error); return j; }, function(e){ clearTimeout(to); throw e; }); }
 function mtCargaLive(cb){
   if(MT.live&&Date.now()-MT.liveT<25000) return cb&&cb();
-  var ctl=window.AbortController?new AbortController():null, to=setTimeout(function(){ if(ctl) ctl.abort(); },9000);
-  fetch(MT_URL+'?v='+Date.now(), ctl?{signal:ctl.signal, cache:'no-store'}:{cache:'no-store'}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(j){ clearTimeout(to); var l=(j&&(j.trenes||j.Trenes))||[]; MT.live={}; l.forEach(function(x){ var k=num(x.codComercial); if(k) MT.live[k]=x; });
-      MT.liveT=Date.now(); MT.liveFecha=j.fechaActualizacion||''; MT.liveErr=''; cb&&cb(); })
-    .catch(function(e){ clearTimeout(to); MT.liveErr=(e&&e.name==='AbortError')?'no responde':'no se puede conectar'; cb&&cb(); });
+  function ok(j,via){ var l=(j&&(j.trenes||j.Trenes))||[]; MT.live={}; l.forEach(function(x){ var k=num(x.codComercial); if(k) MT.live[k]=x; });
+    MT.liveT=Date.now(); MT.liveFecha=j.fechaActualizacion||''; MT.liveErr=''; MT.via=via; cb&&cb(); }
+  // 1.º el intermediario de TrenTurnos (Supabase); si no está, directo a Renfe
+  mtPide(MT_PROXY+'?v='+Date.now()).then(function(j){ ok(j,'intermediario'); }).catch(function(e1){
+    mtPide(MT_URL+'?v='+Date.now()).then(function(j){ ok(j,'directo'); }).catch(function(e2){
+      MT.liveErr=/intermediario/.test(String(e1&&e1.message))?'falta instalar el intermediario':(e2&&e2.name==='AbortError')?'no responde':'no se puede conectar'; cb&&cb(); }); });
 }
 function mtVivo(n){ return MT.live?MT.live[num(n)]||null:null; }
 function mtRetraso(n){ var v=mtVivo(n); if(v&&v.ultRetraso!=null&&!isNaN(+v.ultRetraso)) return {m:+v.ultRetraso, de:'renfe'}; var r=mtRet(n); return r?{m:r.m, de:'mano'}:null; }
