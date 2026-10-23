@@ -37595,13 +37595,17 @@ function chipRet(n){ var r=mtRetraso(n);
 
 // ── Tarjeta en el Calendario ──
 function mtTarjeta(){
-  var pc=document.getElementById('p-cal'); if(!pc) return; var nav=pc.querySelector('.mes-nav'); if(!nav) return;
-  var c=document.getElementById('mt-card'); if(!c){ c=document.createElement('div'); c.id='mt-card'; nav.parentNode.insertBefore(c, nav); }
-  var hoy=mtHoy();
-  c.innerHTML='<div class="mt-card"><div class="t">🚆 Mi tren ahora</div><div class="d">'+(hoy.length?'Tus trenes de hoy · toca uno para ver dónde va':'Busca cualquier tren por su número')+'</div><div class="mt-tb">'+
-    hoy.map(function(x){ return '<button onclick="mtAbrir(\''+x.n+'\')"><b>'+esc(x.n)+'</b>'+chipRet(x.n)+'</button>'; }).join('')+
-    '<button onclick="mtAbrir()"><b>🔍</b><small class="mt-s0">Otro tren</small></button></div></div>';
+  var vie=document.getElementById('mt-card'); if(vie) vie.remove();
+  var f=document.getElementById('mt-fab'); if(!f){ f=document.createElement('button'); f.id='mt-fab'; f.onclick=function(){ mtAbrir(); }; document.body.appendChild(f); }
+  var hoy=mtHoy(), r=null; for(var i=0;i<hoy.length&&!r;i++) r=mtRetraso(hoy[i].n);
+  f.innerHTML='🚆 Mi tren'+(r?(r.m>0?'<small class="mt-sr">+'+r.m+'′</small>':'<small class="mt-sv">✓</small>'):'');
+  mtFabVer();
 }
+// Solo en el Calendario de Tripulante (no encima de otras pantallas)
+function mtFabVer(){ var f=document.getElementById('mt-fab'); if(!f) return; var pc=document.getElementById('p-cal'), ov_=document.getElementById('mt-ov');
+  var tapado=['portal-perfil','portal-tripulante-acceso','portal-interventor-screen','portal-interventor-acceso'].some(function(id){ var e=document.getElementById(id); return e&&getComputedStyle(e).display!=='none'; });
+  f.style.display=(pc&&pc.classList.contains('on')&&!tapado&&!(ov_&&ov_.classList.contains('on')))?'':'none'; }
+setInterval(mtFabVer, 700);
 window.mtTarjeta=mtTarjeta;
 
 // ── Pantalla ──
@@ -37624,22 +37628,23 @@ window.pinta=pinta; function pinta(){
   }
   var n=MT.n, I=mtInfo(n), D=mtDet(n), v=(D&&D.tren)||mtVivo(n), r=mtRetraso(n), d=r?r.m:0, P=(D&&D.paradas)||[];
   var ori=(v&&v.origen)||I.sal, des=(v&&v.destino)||I.lle;
-  h+='<div class="mt-tit">Tren '+esc(n)+'</div>'+(ori?'<div class="mt-sub">'+esc(ori)+' → '+esc(des)+'</div>':'');
-  if(r) h+='<div class="mt-ret'+(d>0?'':' ok')+'"><div><b>'+(r.de==='renfe'?'📡 ':'⏱️ ')+(d>0?'+'+d+' min de retraso':d<0?'Adelantado '+(-d)+' min':'En hora')+'</b><small>'+(r.de==='renfe'?'Dato de Renfe'+(MT.liveFecha?' · '+esc(String(MT.liveFecha).slice(11,16)):'')+' · orientativo':'Marcado a mano · orientativo')+'</small></div>'+(r.de==='mano'?'<button onclick="mtHoja()">Cambiar</button>':'<span>EN DIRECTO</span>')+'</div>';
+  if(!P.length&&(I.hS||I.hL)) P=[{nombre:I.sal||'Salida', sale:I.hS, llega:I.hS},{nombre:I.lle||'Llegada', llega:I.hL, sale:I.hL}];
+  var pill=r?'<div class="mt-pill'+(d>0?'':' ok')+(r.de==='mano'?' mano':'')+'"'+(r.de==='mano'?' onclick="mtHoja()"':'')+'>'+(d>0?'+'+d+' min':d<0?'−'+(-d)+' min':'En hora')+'<small>'+(r.de==='renfe'?'EN DIRECTO':'A MANO · cambiar')+'</small></div>':'';
+  h+='<div class="mt-cab"><div><div class="mt-tit">Tren '+esc(n)+'</div>'+(ori?'<div class="mt-sub">'+esc(ori)+' → '+esc(des)+'</div>':'')+'</div>'+pill+'</div>';
   var pos=v&&v.latitud&&v.longitud&&!v.sinPosicion;
-  if(pos||P.length) h+='<div id="mt-mapa" class="mt-mapa"></div>';
-  if(v){ var sigI=mtSigIdx(P,v,d);
-    h+='<div class="mt-ahora"><div class="h">AHORA</div><div class="g">'+(v.estAnt&&v.estSig&&v.estAnt!==v.estSig?'Entre '+esc(v.estAnt)+' y '+esc(v.estSig):sigI>=0&&P[sigI]?'Hacia '+esc(P[sigI].nombre):'En circulación')+'</div>'+
-      (v.estSig?'<div class="s">Próxima: <b>'+esc(v.estSig)+'</b>'+(v.horaLlegadaSigEst?' · llegada ~'+esc(String(v.horaLlegadaSigEst).slice(11,16)):'')+'</div>':'')+'</div>'; }
-  else h+='<div class="mt-aviso">📡 '+(MT.live||D?'<b>Renfe no da datos de este tren ahora mismo.</b> Puede que aún no haya salido, que ya haya llegado o que no haya cobertura.':MT.liveErr?'<b>No se puede conectar con el directo de Renfe</b> ('+esc(MT.liveErr)+').':'Buscando el tren en el directo de Renfe…')+'<br>Puedes marcar el retraso a mano: solo te pregunto la hora.</div>';
-  if(!v) h+='<button class="mt-btn" onclick="mtHoja()">⏱️ '+(mtRet(n)?'Cambiar el retraso':'Marcar retraso a mano')+'</button>';
-  if(P.length){ var si=mtSigIdx(P,v,d);
-    h+='<div class="mt-lbl">ESTACIONES · '+P.length+' PARADAS</div>'+P.map(function(e,i){ var hp=i===P.length-1?e.llega:(e.sale||e.llega), m=aMin(hp), est=d&&m!=null?aHora(m+d):'';
-      var cl=si<0?'':i<si?' ya':i===si?' on':'';
-      return '<div class="mt-par'+cl+'"><span>'+(i===0?'🟢 ':i===P.length-1?'🔴 ':'')+esc(e.nombre||e.cod)+(i===si?' · <i>próxima</i>':'')+'</span><span>'+(est?'<s>'+hp+'</s><b>'+est+'</b>':hp||'')+'</span></div>'; }).join('');
-  } else if(I.hS||I.hL){ var s=aMin(I.hS), l=aMin(I.hL), y=ahoraMin(), ya=s!=null&&y>=s+d;
-    h+='<div class="mt-lbl">HORARIO</div><div class="mt-par'+(ya?' ya':' on')+'"><span>🟢 '+esc(I.sal||'Salida')+'</span><span>'+(d&&s!=null?'<s>'+I.hS+'</s><b>'+aHora(s+d)+'</b>':I.hS||'—')+'</span></div>'+
-      '<div class="mt-par'+(ya?' on':'')+'"><span>🔴 '+esc(I.lle||'Llegada')+'</span><span>'+(d&&l!=null?'<s>'+I.hL+'</s><b>'+aHora(l+d)+'</b>':I.hL||'—')+'</span></div>'; }
+  if(pos||(D&&D.paradas&&D.paradas.length)) h+='<div id="mt-mapa" class="mt-mapa"></div>';
+  if(!v){ h+='<div class="mt-aviso">📡 '+(MT.live||D?'<b>Renfe no da datos de este tren ahora mismo.</b> Puede que aún no haya salido, que ya haya llegado o que no haya cobertura.':MT.liveErr?'<b>No se puede conectar con el directo de Renfe</b> ('+esc(MT.liveErr)+').':'Buscando el tren en el directo de Renfe…')+'</div>'+
+    '<button class="mt-btn" onclick="mtHoja()">⏱️ '+(mtRet(n)?'Cambiar el retraso a mano':'Marcar retraso a mano')+'</button>'; }
+  MT.si=0; if(P.length){ var si=v?mtSigIdx(P,v,d):-1, y=ahoraMin();
+    if(!v&&r){ si=P.length-1; for(var k=0;k<P.length;k++){ var mk=aMin(P[k].llega||P[k].sale); if(mk!=null&&mk+d>y){ si=k; break; } } if(aMin(P[0].sale)!=null&&aMin(P[0].sale)+d>y) si=0; }
+    MT.si=si; var falta='';
+    if(si>=0&&P[si]){ var lleg=v&&v.horaLlegadaSigEst&&v.estSig&&String(v.estSig)===String(P[si].nombre)?aMin(String(v.horaLlegadaSigEst).slice(11,16)):null; if(lleg==null){ var mm=aMin(P[si].llega||P[si].sale); lleg=mm!=null?mm+d:null; }
+      if(lleg!=null){ var q=lleg-y; if(q<-720) q+=1440; falta=si===0&&!(v&&v.estAnt)?'Sale de '+P[0].nombre+(q>0?' en ~'+q+' min':' ahora'):q>0?'Llega a '+P[si].nombre+' en ~'+q+' min':'Llegando a '+P[si].nombre; } }
+    h+='<div class="mt-tl">'+P.map(function(e,i){ var hp=i===P.length-1?e.llega:(e.sale||e.llega), m=aMin(hp), est=d&&m!=null?aHora(m+d):'', ya=si>=0&&i<si;
+      return (i===si&&falta&&si>0?'<div class="mt-trn"><i>🚆</i><span>'+esc(falta)+'</span></div>':'')+
+        '<div class="mt-st'+(ya?' ya':'')+(i===si?' sig':'')+'"><div class="n">'+esc(e.nombre||e.cod)+'</div><div class="h">'+(i===0?'Salida ':i===P.length-1?'Llegada ':'')+(est?'<s>'+hp+'</s><b>'+est+'</b>':(hp||''))+'</div></div>'+
+        (i===0&&si===0&&falta?'<div class="mt-trn"><i>🚆</i><span>'+esc(falta)+'</span></div>':''); }).join('')+'</div>';
+  }
   if(v&&v.mat) h+='<div class="mt-mini">Composición '+esc(v.mat)+'</div>';
   h+=estado();
   var viejo=document.getElementById('mt-mapa'); if(viejo) viejo.parentNode.removeChild(viejo);
@@ -37690,8 +37695,11 @@ function ponMapa(lat,lon,n,P){ cargaLeaflet(function(){ var el=document.getEleme
     if(tren){ var bb=L.latLngBounds(pts); bb.extend([lat,lon]); MT.mapa.fitBounds(bb,{padding:[24,24]}); } }
   if(tren){ var ic=L.divIcon({className:'mt-pin', html:'<div>🚆</div><span>'+esc(n)+'</span>', iconSize:[44,44], iconAnchor:[22,22]});
     if(MT.marca) MT.marca.setLatLng([lat,lon]); else MT.marca=L.marker([lat,lon],{icon:ic,zIndexOffset:1000}).addTo(MT.mapa); }
+  if(MT.verde){ try{ MT.mapa.removeLayer(MT.verde); }catch(e){} MT.verde=null; }
+  var hechos=(P||[]).slice(0, Math.max(0,MT.si||0)).filter(function(e){ return e.lat&&e.lon; }).map(function(e){ return [e.lat,e.lon]; }); if(tren) hechos.push([lat,lon]);
+  if(hechos.length>1){ MT.verde=L.polyline(hechos,{color:'#22C55E',weight:6,opacity:.95}).addTo(MT.mapa); if(MT.marca) MT.marca.setZIndexOffset(1000); }
   setTimeout(function(){ if(MT.mapa) MT.mapa.invalidateSize(); },60); }); }
-function quitaMapa(){ if(MT.mapa){ try{ MT.mapa.remove(); }catch(e){} } MT.mapa=null; MT.marca=null; MT.mapaTren=null; MT.rutaHecha=false; }
+function quitaMapa(){ if(MT.mapa){ try{ MT.mapa.remove(); }catch(e){} } MT.mapa=null; MT.marca=null; MT.mapaTren=null; MT.rutaHecha=false; MT.verde=null; }
 
 // Enganches: tarjeta al pintar el calendario; botón en el Portal de Interventor
 var _rc=window.renderCal; if(typeof _rc==='function'){ window.renderCal=function(){ var r=_rc.apply(this,arguments); try{ mtTarjeta(); }catch(e){} return r; }; try{ renderCal=window.renderCal; }catch(e){} }
@@ -37710,9 +37718,18 @@ var st=document.createElement('style'); st.textContent=
  '.mt-tr>small{font-size:12px;font-weight:900;padding:4px 8px;border-radius:9px;background:#1E293B}'+
  '.mt-ret{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#7F1D1D;border:2px solid #F87171;border-radius:14px;padding:9px 12px;margin:6px 0 10px}.mt-ret.ok{background:#14532D;border-color:#4ADE80}'+
  '.mt-ret b{font-size:18px;color:#fff}.mt-ret small{display:block;font-size:11.5px;color:#FECACA;font-weight:600}.mt-ret.ok small{color:#BBF7D0}.mt-ret span,.mt-ret button{font:900 11.5px Inter,sans-serif;background:#fff;color:#991B1B;border:0;border-radius:8px;padding:6px 8px;white-space:nowrap}'+
- '.mt-mapa{height:290px;border-radius:16px;overflow:hidden;margin-bottom:10px;background:#DCE7D3}.mt-pin div{width:40px;height:40px;border-radius:50%;background:#DC2626;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 8px #0007}'+
+ '.mt-mapa{height:210px;border-radius:16px;overflow:hidden;margin-bottom:10px;background:#DCE7D3}.mt-pin div{width:40px;height:40px;border-radius:50%;background:#DC2626;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 8px #0007}'+
  '.mt-pin span{position:absolute;left:50%;top:44px;transform:translateX(-50%);background:#111827;color:#fff;font:800 11px Inter,sans-serif;padding:2px 6px;border-radius:6px;white-space:nowrap}'+
  '.mt-ahora{background:#fff;color:#111;border-radius:14px;padding:10px 12px;margin-bottom:8px}.mt-ahora .h{font-size:11px;color:#6B7280;font-weight:900;letter-spacing:1px}.mt-ahora .g{font-size:18px;font-weight:900;line-height:1.2}.mt-ahora .s{font-size:13.5px;margin-top:2px}.mt-par i{font-style:normal;font-size:11px;font-weight:900}'+
+ '#mt-fab{position:fixed;right:14px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:9000;background:linear-gradient(135deg,#1D4ED8,#0EA5E9);color:#fff;border:2px solid #ffffff33;border-radius:28px;padding:11px 15px;font:900 14px Inter,sans-serif;box-shadow:0 6px 16px #0008;cursor:pointer}#mt-fab small{font-size:11.5px;margin-left:5px}'+
+ '.mt-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}.mt-cab .mt-sub{margin-bottom:0}'+
+ '.mt-pill{background:#DC2626;color:#fff;font:900 16px Inter,sans-serif;border-radius:20px;padding:7px 13px;text-align:center;white-space:nowrap}.mt-pill small{display:block;font-size:9.5px;font-weight:800;opacity:.9}.mt-pill.ok{background:#16A34A}.mt-pill.mano{background:#B45309;cursor:pointer}'+
+ '.mt-tl{position:relative;padding-left:36px;margin-top:6px}.mt-tl:before{content:"";position:absolute;left:14px;top:10px;bottom:14px;width:4px;background:#334155;border-radius:2px}'+
+ '.mt-st{position:relative;padding:7px 0 13px}.mt-st:before{content:"";position:absolute;left:-28px;top:10px;width:14px;height:14px;border-radius:50%;background:#0F172A;border:3px solid #64748B;z-index:1}'+
+ '.mt-st.ya:before{background:#22C55E;border-color:#22C55E}.mt-st.ya:after{content:"";position:absolute;left:-23px;top:14px;bottom:-14px;width:4px;background:#22C55E}.mt-st.sig:before{border-color:#F59E0B}'+
+ '.mt-st .n{font-size:16.5px;font-weight:800;color:#fff}.mt-st.ya .n{color:#94A3B8}.mt-st.sig .n{color:#FCD34D}.mt-st .h{font-size:13.5px;color:#94A3B8;font-weight:700}.mt-st .h s{opacity:.7;margin-right:6px}.mt-st .h b{color:#F87171}.mt-st.ya .h b{color:#86EFAC}'+
+ '.mt-trn{position:relative;margin:-2px 0 10px -36px;display:flex;align-items:center;gap:8px;z-index:2}.mt-trn i{width:32px;height:32px;border-radius:50%;background:#DC2626;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:15px;flex:none}'+
+ '.mt-trn span{background:#1E293B;border:1.5px solid #DC2626;border-radius:10px;padding:6px 10px;font-size:13.5px;font-weight:800;color:#fff}'+
  '.mt-aviso{background:#1E293B;border:2px dashed #64748B;border-radius:14px;padding:12px;font-size:14px;line-height:1.45;margin:6px 0 10px}'+
  '.mt-btn{width:100%;background:#F59E0B;color:#111;border:0;border-radius:14px;padding:14px;font:900 17px Inter,sans-serif;cursor:pointer;margin-bottom:6px}'+
  '.mt-par{display:flex;justify-content:space-between;background:#13243F;border-radius:11px;padding:10px 12px;margin-bottom:6px;font-size:15px;font-weight:700}.mt-par.ya{opacity:.5}.mt-par.on{background:#F59E0B;color:#111}.mt-par s{opacity:.6;font-size:12px;margin-right:6px}.mt-par b{color:#FCA5A5}.mt-par.on b{color:#7F1D1D}'+
