@@ -37588,7 +37588,7 @@ function mtCargaLive(cb){
       MT.liveErr=/intermediario/.test(String(e1&&e1.message))?'falta instalar el intermediario':(e2&&e2.name==='AbortError')?'no responde':'no se puede conectar'; cb&&cb(); }); });
 }
 function mtVivo(n){ return MT.live?MT.live[num(n)]||null:null; }
-function mtRetraso(n){ var v=mtVivo(n); if(v&&v.ultRetraso!=null&&!isNaN(+v.ultRetraso)) return {m:+v.ultRetraso, de:'renfe'}; var r=mtRet(n); return r?{m:r.m, de:'mano'}:null; }
+function mtRetraso(n){ var v=mtVivo(n); if(v&&v.ultRetraso!=null&&v.ultRetraso!==''&&!isNaN(+v.ultRetraso)&&Math.abs(+v.ultRetraso)<=600) return {m:+v.ultRetraso, de:'renfe'}; var r=mtRet(n); return r?{m:r.m, de:'mano'}:null; }
 function chipRet(n){ var r=mtRetraso(n);
   if(!r) return MT.live&&!mtVivo(n)?'<small class="mt-s0">sin datos</small>':'<small class="mt-s0">—</small>';
   return r.m>0?'<small class="mt-sr">'+(r.de==='renfe'?'📡':'⏱️')+' +'+r.m+' min</small>':'<small class="mt-sv">'+(r.de==='renfe'?'📡':'⏱️')+' en hora</small>'; }
@@ -37606,8 +37606,8 @@ window.mtTarjeta=mtTarjeta;
 
 // ── Pantalla ──
 function ov(){ var o=document.getElementById('mt-ov'); if(!o){ o=document.createElement('div'); o.id='mt-ov'; document.body.appendChild(o); } return o; }
-window.mtAbrir=function(n){ MT.n=n?num(n):''; MT.vista=n?'tren':'buscar'; ov().classList.add('on'); pinta(); mtCargaLive(pinta);
-  clearInterval(MT.timer); MT.timer=setInterval(function(){ if(!ov().classList.contains('on')) return clearInterval(MT.timer); MT.liveT=0; mtCargaLive(pinta); },30000); if(n) mtReciente(n); };
+window.mtAbrir=function(n){ MT.n=n?num(n):''; MT.vista=n?'tren':'buscar'; ov().classList.add('on'); pinta(); mtCargaLive(pinta); if(n) mtCargaDet(n,pinta);
+  clearInterval(MT.timer); MT.timer=setInterval(function(){ if(!ov().classList.contains('on')) return clearInterval(MT.timer); MT.liveT=0; mtCargaLive(pinta); if(MT.vista==='tren'&&MT.n){ MT.det[MT.n]&&(MT.det[MT.n].t=0); mtCargaDet(MT.n,pinta); } },30000); if(n) mtReciente(n); };
 window.mtCerrar=function(){ ov().classList.remove('on'); clearInterval(MT.timer); quitaMapa(); mtTarjeta(); };
 window.mtBusca=function(v){ var n=num(v), c=document.getElementById('mt-res'); if(!c) return; if(n.length<3){ c.innerHTML=''; return; }
   var I=mtInfo(n), vv=mtVivo(n);
@@ -37622,20 +37622,41 @@ window.pinta=pinta; function pinta(){
       (rec.length?'<div class="mt-lbl">ÚLTIMOS QUE MIRASTE</div>'+rec.map(filaTren).join(''):'')+estado();
     o.innerHTML=h+'</div>'; quitaMapa(); var i=document.getElementById('mt-num'); if(i&&MT.q){ i.value=MT.q; mtBusca(MT.q); } return;
   }
-  var n=MT.n, I=mtInfo(n), v=mtVivo(n), r=mtRetraso(n), d=r?r.m:0;
-  h+='<div class="mt-tit">Tren '+esc(n)+'</div>'+(I.sal?'<div class="mt-sub">'+esc(I.sal)+' → '+esc(I.lle)+'</div>':(v&&v.desCorridor?'<div class="mt-sub">'+esc(v.desCorridor)+'</div>':''));
-  if(r) h+='<div class="mt-ret'+(d>0?'':' ok')+'"><div><b>'+(r.de==='renfe'?'📡 ':'⏱️ ')+(d>0?'+'+d+' min de retraso':d<0?'Adelantado '+(-d)+' min':'En hora')+'</b><small>'+(r.de==='renfe'?'Dato de Renfe'+(MT.liveFecha?' · '+esc(String(MT.liveFecha).slice(11,19)||MT.liveFecha):'')+' · orientativo':'Marcado a mano · orientativo')+'</small></div>'+(r.de==='mano'?'<button onclick="mtHoja()">Cambiar</button>':'<span>EN DIRECTO</span>')+'</div>';
-  if(v&&v.latitud&&v.longitud) h+='<div id="mt-mapa" class="mt-mapa"></div>';
-  else h+='<div class="mt-aviso">📡 '+(MT.live?'<b>Renfe no da datos de este tren ahora mismo.</b> Puede que no haya salido, que ya haya llegado o que no haya cobertura.':MT.liveErr?'<b>No se puede conectar con el directo de Renfe</b> ('+esc(MT.liveErr)+').':'Buscando el tren en el directo de Renfe…')+'<br>Puedes marcar el retraso a mano: solo te pregunto la hora.</div>';
+  var n=MT.n, I=mtInfo(n), D=mtDet(n), v=(D&&D.tren)||mtVivo(n), r=mtRetraso(n), d=r?r.m:0, P=(D&&D.paradas)||[];
+  var ori=(v&&v.origen)||I.sal, des=(v&&v.destino)||I.lle;
+  h+='<div class="mt-tit">Tren '+esc(n)+'</div>'+(ori?'<div class="mt-sub">'+esc(ori)+' → '+esc(des)+'</div>':'');
+  if(r) h+='<div class="mt-ret'+(d>0?'':' ok')+'"><div><b>'+(r.de==='renfe'?'📡 ':'⏱️ ')+(d>0?'+'+d+' min de retraso':d<0?'Adelantado '+(-d)+' min':'En hora')+'</b><small>'+(r.de==='renfe'?'Dato de Renfe'+(MT.liveFecha?' · '+esc(String(MT.liveFecha).slice(11,16)):'')+' · orientativo':'Marcado a mano · orientativo')+'</small></div>'+(r.de==='mano'?'<button onclick="mtHoja()">Cambiar</button>':'<span>EN DIRECTO</span>')+'</div>';
+  var pos=v&&v.latitud&&v.longitud&&!v.sinPosicion;
+  if(pos||P.length) h+='<div id="mt-mapa" class="mt-mapa"></div>';
+  if(v){ var sigI=mtSigIdx(P,v,d);
+    h+='<div class="mt-ahora"><div class="h">AHORA</div><div class="g">'+(v.estAnt&&v.estSig&&v.estAnt!==v.estSig?'Entre '+esc(v.estAnt)+' y '+esc(v.estSig):sigI>=0&&P[sigI]?'Hacia '+esc(P[sigI].nombre):'En circulación')+'</div>'+
+      (v.estSig?'<div class="s">Próxima: <b>'+esc(v.estSig)+'</b>'+(v.horaLlegadaSigEst?' · llegada ~'+esc(String(v.horaLlegadaSigEst).slice(11,16)):'')+'</div>':'')+'</div>'; }
+  else h+='<div class="mt-aviso">📡 '+(MT.live||D?'<b>Renfe no da datos de este tren ahora mismo.</b> Puede que aún no haya salido, que ya haya llegado o que no haya cobertura.':MT.liveErr?'<b>No se puede conectar con el directo de Renfe</b> ('+esc(MT.liveErr)+').':'Buscando el tren en el directo de Renfe…')+'<br>Puedes marcar el retraso a mano: solo te pregunto la hora.</div>';
   if(!v) h+='<button class="mt-btn" onclick="mtHoja()">⏱️ '+(mtRet(n)?'Cambiar el retraso':'Marcar retraso a mano')+'</button>';
-  if(I.hS||I.hL){ var s=aMin(I.hS), l=aMin(I.hL), y=ahoraMin(), ya=s!=null&&y>=s+d;
+  if(P.length){ var si=mtSigIdx(P,v,d);
+    h+='<div class="mt-lbl">ESTACIONES · '+P.length+' PARADAS</div>'+P.map(function(e,i){ var hp=i===P.length-1?e.llega:(e.sale||e.llega), m=aMin(hp), est=d&&m!=null?aHora(m+d):'';
+      var cl=si<0?'':i<si?' ya':i===si?' on':'';
+      return '<div class="mt-par'+cl+'"><span>'+(i===0?'🟢 ':i===P.length-1?'🔴 ':'')+esc(e.nombre||e.cod)+(i===si?' · <i>próxima</i>':'')+'</span><span>'+(est?'<s>'+hp+'</s><b>'+est+'</b>':hp||'')+'</span></div>'; }).join('');
+  } else if(I.hS||I.hL){ var s=aMin(I.hS), l=aMin(I.hL), y=ahoraMin(), ya=s!=null&&y>=s+d;
     h+='<div class="mt-lbl">HORARIO</div><div class="mt-par'+(ya?' ya':' on')+'"><span>🟢 '+esc(I.sal||'Salida')+'</span><span>'+(d&&s!=null?'<s>'+I.hS+'</s><b>'+aHora(s+d)+'</b>':I.hS||'—')+'</span></div>'+
       '<div class="mt-par'+(ya?' on':'')+'"><span>🔴 '+esc(I.lle||'Llegada')+'</span><span>'+(d&&l!=null?'<s>'+I.hL+'</s><b>'+aHora(l+d)+'</b>':I.hL||'—')+'</span></div>'; }
-  if(v) h+='<div class="mt-mini">Composición '+esc(v.mat||'—')+(v.codOrigen?' · origen '+esc(v.codOrigen)+' → '+esc(v.codDestino||''):'')+'</div>';
+  if(v&&v.mat) h+='<div class="mt-mini">Composición '+esc(v.mat)+'</div>';
   h+=estado();
+  var viejo=document.getElementById('mt-mapa'); if(viejo) viejo.parentNode.removeChild(viejo);
   o.innerHTML=h+'</div>'+(MT.hoja?hojaHTML():'');
-  if(v&&v.latitud&&v.longitud) ponMapa(+String(v.latitud).replace(',','.'), +String(v.longitud).replace(',','.'), n); else quitaMapa();
+  var nuevo=document.getElementById('mt-mapa');
+  if(nuevo&&viejo&&MT.mapa&&MT.mapaTren===n){ nuevo.parentNode.replaceChild(viejo,nuevo); }
+  if(pos||P.length) ponMapa(pos?+String(v.latitud).replace(',','.'):NaN, pos?+String(v.longitud).replace(',','.'):NaN, n, P); else quitaMapa();
 }
+// Detalle de un tren (paradas con nombre y horas) desde el intermediario
+function mtDet(n){ var x=(MT.det||{})[num(n)]; return x?x.d:null; }
+function mtCargaDet(n,cb){ n=num(n); MT.det=MT.det||{}; var x=MT.det[n]; if(x&&Date.now()-x.t<20000) return cb&&cb();
+  mtPide(MT_PROXY+'?tren='+n+'&v='+Date.now()).then(function(j){ if(j.tren&&j.tren.ultRetraso!=null&&Math.abs(+j.tren.ultRetraso)>600) j.tren.ultRetraso=null;
+    MT.det[n]={t:Date.now(), d:j}; if(j.fechaActualizacion) MT.liveFecha=j.fechaActualizacion; if(j.tren){ MT.live=MT.live||{}; MT.live[n]=j.tren; } cb&&cb(); }).catch(function(){ cb&&cb(); }); }
+// Índice de la próxima parada: la que Renfe dice; si es un punto intermedio, la primera que aún no ha pasado
+function mtSigIdx(P,v,d){ if(!P.length) return -1; var cs=v&&String(v.codEstSig||'').replace(/^0+/,'');
+  for(var i=0;i<P.length;i++) if(cs&&String(P[i].cod).replace(/^0+/,'')===cs) return i;
+  if(!v) return -1; var y=ahoraMin(); for(i=0;i<P.length;i++){ var m=aMin(P[i].llega||P[i].sale); if(m!=null&&m+(d||0)>y) return i; } return P.length-1; }
 window.MT_volver=function(){ MT.vista='buscar'; MT.hoja=false; pinta(); };
 function estado(){ return '<div class="mt-mini">'+(MT.live?'📡 Directo de Renfe: '+Object.keys(MT.live).length+' trenes circulando ahora':MT.liveErr?'📡 Directo de Renfe: '+esc(MT.liveErr):'📡 Conectando con Renfe…')+' · versión de prueba</div>'; }
 // Hoja del retraso a mano: «¿A qué hora salís de…?» / «¿A qué hora llegáis a…?»
@@ -37646,7 +37667,7 @@ function hojaHTML(){ var I=mtInfo(MT.n), ref=MT.ref, base=ref==='s'?aMin(I.hS):r
     (I.hS||I.hL?'<div class="mt-seg"><button class="'+(ref==='s'?'on':'')+'" onclick="MT.ref=\'s\';pinta()">Salida'+(I.sal?' de '+esc(I.sal):'')+'</button><button class="'+(ref==='l'?'on':'')+'" onclick="MT.ref=\'l\';pinta()">Llegada'+(I.lle?' a '+esc(I.lle):'')+'</button></div>':
       '<div class="mt-h2">No tengo el horario de este tren</div><div class="mt-hs">¿A qué hora tocaba salir?</div><input type="time" class="mt-time" value="'+esc(MT.prevista||'')+'" onchange="MT.prevista=this.value;pinta()">')+
     '<div class="mt-h2">'+(ref==='l'?'⏱️ ¿A qué hora llegáis?':'⏱️ ¿A qué hora salís?')+'</div>'+(base!=null?'<div class="mt-hs">Tocaba a las '+aHora(base)+'. Ya está puesta la hora de ahora.</div>':'')+
-    '<div class="mt-reloj"><button onclick="MT.hh--;pinta()">−1</button><b>'+aHora(MT.hh)+'</b><button onclick="MT.hh++;pinta()">+1</button></div><div style="text-align:center"><button class="mt-ahora" onclick="MT.hh=ahoraMin_();pinta()">Ahora</button></div>'+
+    '<div class="mt-reloj"><button onclick="MT.hh--;pinta()">−1</button><b>'+aHora(MT.hh)+'</b><button onclick="MT.hh++;pinta()">+1</button></div><div style="text-align:center"><button class="mt-ahorab" onclick="MT.hh=ahoraMin_();pinta()">Ahora</button></div>'+
     (d!=null?'<div class="mt-calc'+(d>0?'':' v')+'">'+(d>0?'= '+d+' min de retraso':d<0?'= '+(-d)+' min adelantado':'= en hora')+'</div><button class="mt-ok" onclick="mtGuarda('+d+')">✓ Sí, a las '+aHora(MT.hh)+'</button>':'')+
     (mtRet(MT.n)?'<button class="mt-quita" onclick="mtGuarda(null)">Quitar el retraso</button>':'')+'<button class="mt-quita" onclick="MT.hoja=false;pinta()">Cancelar</button></div>';
   return r; }
@@ -37658,14 +37679,19 @@ function cargaLeaflet(cb){ if(window.L) return cb(); if(MT.cargandoL){ MT.cargan
   var l=document.createElement('link'); l.rel='stylesheet'; l.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(l);
   var s=document.createElement('script'); s.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload=function(){ var q=MT.cargandoL; MT.cargandoL=null; q.forEach(function(f){ f(); }); };
   s.onerror=function(){ MT.cargandoL=null; var m=document.getElementById('mt-mapa'); if(m) m.innerHTML='<div class="mt-aviso" style="margin:0">No se pudo cargar el mapa.</div>'; }; document.head.appendChild(s); }
-function ponMapa(lat,lon,n){ if(isNaN(lat)||isNaN(lon)) return; cargaLeaflet(function(){ var el=document.getElementById('mt-mapa'); if(!el) return;
-  if(MT.mapa&&MT.mapa.getContainer()!==el){ quitaMapa(); }
-  if(!MT.mapa){ MT.mapa=L.map(el,{zoomControl:true, attributionControl:true}).setView([lat,lon],9);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18, attribution:'© OpenStreetMap'}).addTo(MT.mapa); }
-  var ic=L.divIcon({className:'mt-pin', html:'<div>🚆</div><span>'+esc(n)+'</span>', iconSize:[44,44], iconAnchor:[22,22]});
-  if(MT.marca) MT.marca.setLatLng([lat,lon]); else MT.marca=L.marker([lat,lon],{icon:ic}).addTo(MT.mapa);
-  MT.mapa.setView([lat,lon], MT.mapa.getZoom()); setTimeout(function(){ if(MT.mapa) MT.mapa.invalidateSize(); },60); }); }
-function quitaMapa(){ if(MT.mapa){ try{ MT.mapa.remove(); }catch(e){} } MT.mapa=null; MT.marca=null; }
+function ponMapa(lat,lon,n,P){ cargaLeaflet(function(){ var el=document.getElementById('mt-mapa'); if(!el) return;
+  if(MT.mapa&&(MT.mapa.getContainer()!==el||MT.mapaTren!==n)){ quitaMapa(); }
+  var pts=(P||[]).filter(function(e){ return e.lat&&e.lon; }).map(function(e){ return [e.lat,e.lon]; }), tren=!isNaN(lat)&&!isNaN(lon);
+  if(!MT.mapa){ MT.mapa=L.map(el,{zoomControl:true, attributionControl:true}); MT.mapaTren=n;
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18, attribution:'© OpenStreetMap'}).addTo(MT.mapa);
+    if(tren) MT.mapa.setView([lat,lon],9); else if(pts.length) MT.mapa.fitBounds(pts,{padding:[20,20]}); }
+  if(pts.length>1&&!MT.rutaHecha){ MT.rutaHecha=true; L.polyline(pts,{color:'#2563EB',weight:5,opacity:.8}).addTo(MT.mapa);
+    (P||[]).forEach(function(e,i){ if(!e.lat) return; L.circleMarker([e.lat,e.lon],{radius:i===0||i===P.length-1?7:5,color:'#1E3A8A',weight:2,fillColor:'#fff',fillOpacity:1}).bindTooltip(e.nombre||'',{direction:'top'}).addTo(MT.mapa); });
+    if(tren){ var bb=L.latLngBounds(pts); bb.extend([lat,lon]); MT.mapa.fitBounds(bb,{padding:[24,24]}); } }
+  if(tren){ var ic=L.divIcon({className:'mt-pin', html:'<div>🚆</div><span>'+esc(n)+'</span>', iconSize:[44,44], iconAnchor:[22,22]});
+    if(MT.marca) MT.marca.setLatLng([lat,lon]); else MT.marca=L.marker([lat,lon],{icon:ic,zIndexOffset:1000}).addTo(MT.mapa); }
+  setTimeout(function(){ if(MT.mapa) MT.mapa.invalidateSize(); },60); }); }
+function quitaMapa(){ if(MT.mapa){ try{ MT.mapa.remove(); }catch(e){} } MT.mapa=null; MT.marca=null; MT.mapaTren=null; MT.rutaHecha=false; }
 
 // Enganches: tarjeta al pintar el calendario; botón en el Portal de Interventor
 var _rc=window.renderCal; if(typeof _rc==='function'){ window.renderCal=function(){ var r=_rc.apply(this,arguments); try{ mtTarjeta(); }catch(e){} return r; }; try{ renderCal=window.renderCal; }catch(e){} }
@@ -37686,6 +37712,7 @@ var st=document.createElement('style'); st.textContent=
  '.mt-ret b{font-size:18px;color:#fff}.mt-ret small{display:block;font-size:11.5px;color:#FECACA;font-weight:600}.mt-ret.ok small{color:#BBF7D0}.mt-ret span,.mt-ret button{font:900 11.5px Inter,sans-serif;background:#fff;color:#991B1B;border:0;border-radius:8px;padding:6px 8px;white-space:nowrap}'+
  '.mt-mapa{height:290px;border-radius:16px;overflow:hidden;margin-bottom:10px;background:#DCE7D3}.mt-pin div{width:40px;height:40px;border-radius:50%;background:#DC2626;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 8px #0007}'+
  '.mt-pin span{position:absolute;left:50%;top:44px;transform:translateX(-50%);background:#111827;color:#fff;font:800 11px Inter,sans-serif;padding:2px 6px;border-radius:6px;white-space:nowrap}'+
+ '.mt-ahora{background:#fff;color:#111;border-radius:14px;padding:10px 12px;margin-bottom:8px}.mt-ahora .h{font-size:11px;color:#6B7280;font-weight:900;letter-spacing:1px}.mt-ahora .g{font-size:18px;font-weight:900;line-height:1.2}.mt-ahora .s{font-size:13.5px;margin-top:2px}.mt-par i{font-style:normal;font-size:11px;font-weight:900}'+
  '.mt-aviso{background:#1E293B;border:2px dashed #64748B;border-radius:14px;padding:12px;font-size:14px;line-height:1.45;margin:6px 0 10px}'+
  '.mt-btn{width:100%;background:#F59E0B;color:#111;border:0;border-radius:14px;padding:14px;font:900 17px Inter,sans-serif;cursor:pointer;margin-bottom:6px}'+
  '.mt-par{display:flex;justify-content:space-between;background:#13243F;border-radius:11px;padding:10px 12px;margin-bottom:6px;font-size:15px;font-weight:700}.mt-par.ya{opacity:.5}.mt-par.on{background:#F59E0B;color:#111}.mt-par s{opacity:.6;font-size:12px;margin-right:6px}.mt-par b{color:#FCA5A5}.mt-par.on b{color:#7F1D1D}'+
@@ -37694,7 +37721,7 @@ var st=document.createElement('style'); st.textContent=
  '.mt-seg{display:flex;background:#F3F4F6;border-radius:12px;padding:4px;margin-bottom:10px}.mt-seg button{flex:1;border:0;background:none;border-radius:10px;padding:9px 4px;font:800 13px Inter,sans-serif;color:#6B7280}.mt-seg .on{background:#fff;color:#111;box-shadow:0 1px 4px #0002}'+
  '.mt-h2{font-size:20px;font-weight:900}.mt-hs{font-size:13.5px;color:#4B5563;margin:2px 0 6px}.mt-time{font:900 24px Inter,sans-serif;padding:6px 10px;border-radius:10px;border:2px solid #D1D5DB;margin-bottom:8px}'+
  '.mt-reloj{display:flex;justify-content:center;align-items:center;gap:14px;margin:8px 0 6px}.mt-reloj b{font-size:44px;font-weight:900;background:#F3F4F6;border-radius:14px;padding:4px 16px}.mt-reloj button{width:56px;height:48px;border:0;border-radius:12px;background:#E5E7EB;font:900 18px Inter,sans-serif}'+
- '.mt-ahora{border:0;background:none;color:#2563EB;font:800 14px Inter,sans-serif;padding:4px 10px}'+
+ '.mt-ahorab{border:0;background:none;color:#2563EB;font:800 14px Inter,sans-serif;padding:4px 10px}'+
  '.mt-calc{background:#FEF2F2;border:2px solid #FCA5A5;border-radius:12px;padding:8px;text-align:center;font-weight:900;color:#991B1B;margin:8px 0;font-size:16px}.mt-calc.v{background:#F0FDF4;border-color:#86EFAC;color:#166534}'+
  '.mt-ok{width:100%;background:#16A34A;color:#fff;border:0;border-radius:14px;padding:14px;font:900 17px Inter,sans-serif;margin-bottom:4px}.mt-quita{width:100%;border:0;background:none;color:#6B7280;font:800 14px Inter,sans-serif;padding:8px}';
 document.head.appendChild(st);
