@@ -37618,7 +37618,7 @@ window.mtBusca=function(v){ var n=num(v), c=document.getElementById('mt-res'); i
   c.innerHTML='<button class="mt-tr on" onclick="mtAbrir(\''+n+'\')"><div><b>Tren '+esc(n)+'</b><small>'+(I.sal?esc(I.sal)+(I.hS?' '+I.hS:'')+' → '+esc(I.lle)+(I.hL?' '+I.hL:''):vv?'En circulación ahora':'Toca para ver')+'</small></div>'+chipRet(n)+'</button>'; };
 function filaTren(x){ var I=mtInfo(x); return '<button class="mt-tr" onclick="mtAbrir(\''+x+'\')"><div><b>Tren '+esc(x)+'</b><small>'+(I.sal?esc(I.sal)+(I.hS?' '+I.hS:'')+' → '+esc(I.lle)+(I.hL?' '+I.hL:''):'')+'</small></div>'+chipRet(x)+'</button>'; }
 window.pinta=pinta; function pinta(){
-  var o=ov(), h='<div class="mt-in"><button class="mt-back" onclick="'+(MT.vista==='tren'?'MT_volver()':'mtCerrar()')+'">← Volver</button>';
+  var o=ov(), h='<div class="mt-in"><div class="mt-barra"><button class="mt-back" onclick="'+(MT.vista==='tren'?'MT_volver()':'mtCerrar()')+'">← Volver</button>'+(MT.vista==='tren'?'<button class="mt-otro" onclick="MT_otro()">🔁 Otro tren</button>':'')+'</div>';
   if(MT.vista==='buscar'){
     var hoy=mtHoy(), rec=(mtG().rec||[]).filter(function(x){ return !hoy.some(function(y){ return y.n===x; }); });
     h+='<div class="mt-tit">¿Qué tren buscas?</div><input id="mt-num" class="mt-inp" inputmode="numeric" placeholder="Nº de tren" oninput="mtBusca(this.value)"><div id="mt-res"></div>'+
@@ -37662,6 +37662,7 @@ function mtCargaDet(n,cb){ n=num(n); MT.det=MT.det||{}; var x=MT.det[n]; if(x&&D
 function mtSigIdx(P,v,d){ if(!P.length) return -1; var cs=v&&String(v.codEstSig||'').replace(/^0+/,'');
   for(var i=0;i<P.length;i++) if(cs&&String(P[i].cod).replace(/^0+/,'')===cs) return i;
   if(!v) return -1; var y=ahoraMin(); for(i=0;i<P.length;i++){ var m=aMin(P[i].llega||P[i].sale); if(m!=null&&m+(d||0)>y) return i; } return P.length-1; }
+window.MT_otro=function(){ MT.vista='buscar'; MT.hoja=false; MT.q=''; pinta(); var i=document.getElementById('mt-num'); if(i){ i.focus(); } };
 window.MT_volver=function(){ MT.vista='buscar'; MT.hoja=false; pinta(); };
 function estado(){ return '<div class="mt-mini">'+(MT.live?'📡 Directo de Renfe: '+Object.keys(MT.live).length+' trenes circulando ahora':MT.liveErr?'📡 Directo de Renfe: '+esc(MT.liveErr):'📡 Conectando con Renfe…')+' · versión de prueba</div>'; }
 // Hoja del retraso a mano: «¿A qué hora salís de…?» / «¿A qué hora llegáis a…?»
@@ -37730,6 +37731,7 @@ var st=document.createElement('style'); st.textContent=
  '.mt-st .n{font-size:16.5px;font-weight:800;color:#fff}.mt-st.ya .n{color:#94A3B8}.mt-st.sig .n{color:#FCD34D}.mt-st .h{font-size:13.5px;color:#94A3B8;font-weight:700}.mt-st .h s{opacity:.7;margin-right:6px}.mt-st .h b{color:#F87171}.mt-st.ya .h b{color:#86EFAC}'+
  '.mt-trn{position:relative;margin:-2px 0 10px -36px;display:flex;align-items:center;gap:8px;z-index:2}.mt-trn i{width:32px;height:32px;border-radius:50%;background:#DC2626;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:15px;flex:none}'+
  '.mt-trn span{background:#1E293B;border:1.5px solid #DC2626;border-radius:10px;padding:6px 10px;font-size:13.5px;font-weight:800;color:#fff}'+
+ '.mt-barra{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.mt-barra .mt-back{margin-bottom:0}.mt-otro{background:#2563EB;border:0;border-radius:10px;padding:8px 13px;color:#fff;font:900 14px Inter,sans-serif;cursor:pointer}'+
  '.mt-aviso{background:#1E293B;border:2px dashed #64748B;border-radius:14px;padding:12px;font-size:14px;line-height:1.45;margin:6px 0 10px}'+
  '.mt-btn{width:100%;background:#F59E0B;color:#111;border:0;border-radius:14px;padding:14px;font:900 17px Inter,sans-serif;cursor:pointer;margin-bottom:6px}'+
  '.mt-par{display:flex;justify-content:space-between;background:#13243F;border-radius:11px;padding:10px 12px;margin-bottom:6px;font-size:15px;font-weight:700}.mt-par.ya{opacity:.5}.mt-par.on{background:#F59E0B;color:#111}.mt-par s{opacity:.6;font-size:12px;margin-right:6px}.mt-par b{color:#FCA5A5}.mt-par.on b{color:#7F1D1D}'+
