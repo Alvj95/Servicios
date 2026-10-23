@@ -3560,129 +3560,23 @@ sxInicio=function(){
   'body.pk-sinnav .bnav{display:none!important}';
   document.head.appendChild(st); })();
 
-/* ── PRUEBA · Servicios más sencillo (Idea 2): todo gira en «Ahora» ──
-   Con el MOL cargado, la primera pestaña es «Ahora»: dónde vamos, una tarjeta por servicio con
-   los asientos que faltan, el bar móvil y «Llegamos a…». Nada se pierde: la ficha del asiento
-   tiene servir, no subió, cambiar, modificar y quitar; «＋» añade pasajeros; ⚙️ lleva al resto. */
-var AH={lista:null, llegada:null};
-function ahEst(){ var P=sxParadas(); return P[Math.min(sxParadaIdx(), Math.max(P.length-1,0))]||null; }
-function ahAbordo(r,e){ if(!e) return true; return ORDEN[r.origen]<=ORDEN[e]&&ORDEN[r.destino]>ORDEN[e]; }
-function ahPend(r){ return !servidos[r.sid]&&subio[r.sid]!=='no'; }
-function ahAs(r){ return pad(r.fila)+r.letra; }
-function ahKey(r){ return seatKey(r); }
-function ahChip(r,varios){ return '<span onclick="event.stopPropagation();ficha(\''+ahKey(r)+'\')">'+(varios?'<i>'+cocheVer(r.coche)+'·</i>':'')+ahAs(r)+(r.especial?' ⚠️':'')+'</span>'; }
-function ahAhoraHTML(){
-  var P=sxParadas(), i=Math.min(sxParadaIdx(), Math.max(P.length-1,0)), e=P[i], sig=P[i+1], varios=COCHES.length>1;
-  var h='<div class="ah-vamos"><small>VAMOS POR</small><b>'+(e?(i===0?'Salida de ':'')+limpio(estCorto(e)):'—')+'</b></div>';
-  if(AH.llegada&&AH.llegada.i===i&&i>0){ var sub=LISTA.filter(function(r){ return r.origen===e&&subio[r.sid]!=='no'; });
-    h+='<div class="ah-suben">🚉 '+(sub.length?'Suben '+sub.length+': '+sub.slice(0,8).map(function(r){ return ahAs(r); }).join(' · ')+(sub.length>8?'…':''):'Aquí no sube nadie con servicio')+'</div>'; }
-  // Una tarjeta por servicio: los que van a bordo en este tramo
-  var ks=Object.keys(COMIDAS).filter(function(k){ return LISTA.some(function(r){ return r.k===k; }); }), luego=[];
-  ks.forEach(function(k){ var ab=LISTA.filter(function(r){ return r.k===k&&ahAbordo(r,e)&&subio[r.sid]!=='no'; }), pend=ab.filter(ahPend), m=COMIDAS[k];
-    if(!ab.length){ var mas=LISTA.filter(function(r){ return r.k===k&&ahPend(r)&&ORDEN[r.origen]>ORDEN[e]; }); if(mas.length) luego.push({k:k,n:mas.length,de:mas.map(function(r){ return r.origen; }).sort(function(a,b){ return ORDEN[a]-ORDEN[b]; })[0]}); return; }
-    h+='<div class="ah-tarj'+(pend.length?'':' hecha')+'" style="background:'+m.c+'" onclick="ahLista(\''+k+'\')"><div class="t">'+m.e+' '+limpio(m.n)+'<b>'+(ab.length-pend.length)+' de '+ab.length+'</b></div>'+
-      (pend.length?'<div class="ah-chips">'+pend.slice(0,14).map(function(r){ return ahChip(r,varios); }).join('')+(pend.length>14?'<span>+'+(pend.length-14)+'</span>':'')+'</div>':'<div class="ah-ok">✓ Todo servido</div>')+'</div>'; });
-  if(luego.length) h+='<div class="ah-luego">Más adelante: '+luego.map(function(x){ return COMIDAS[x.k].e+' '+limpio(COMIDAS[x.k].n)+' ('+x.n+') desde '+limpio(estCorto(x.de)); }).join(' · ')+'</div>';
-  var Q=typeof sqActual==='function'?sqActual():null; if(Q&&typeof sqBMhtml==='function') h+=sqBMhtml(Q);
-  h+=sig?'<button class="sx-gbtn sx-az ah-lleg" onclick="ahLlegamos()"><span>🚉</span><div>Llegamos a '+limpio(estCorto(sig))+'</div></button>':(P.length?'<div class="ah-luego" style="text-align:center">🏁 Final del recorrido</div>':'');
-  if(i>0) h+='<button class="sx-mas" style="margin-top:-6px" onclick="ahVolver()">‹ Volver a la parada anterior</button>';
-  return h;
-}
-function ahLlegamos(){ var P=sxParadas(), i=sxParadaIdx()+1; if(i>=P.length) return;
-  try{ localStorage.setItem(CLAVE+'_parada', JSON.stringify({c:CARGADO_EN, i:i})); }catch(x){} AH.llegada={i:i}; estFiltro={modo:'sube', est:null};
-  sxInicio(); document.getElementById('body').scrollTop=0; toast('🚉 '+estCorto(P[i])); }
-function ahVolver(){ var i=Math.max(0,sxParadaIdx()-1); try{ localStorage.setItem(CLAVE+'_parada', JSON.stringify({c:CARGADO_EN, i:i})); }catch(x){} AH.llegada=null; estFiltro={modo:'sube', est:null}; sxInicio(); }
-// Lista de un servicio: un toque = servido; «⋯» = ficha completa
-function ahLista(k){ AH.lista=k; hoja='ah-lista'; fichaAbierta=null; ahPintaLista(); document.getElementById('ov-asiento').classList.add('on'); }
-function ahPintaLista(){
-  var k=AH.lista, m=COMIDAS[k], e=ahEst(), varios=COCHES.length>1;
-  var ab=LISTA.filter(function(r){ return r.k===k&&ahAbordo(r,e); }), otros=LISTA.filter(function(r){ return r.k===k&&ab.indexOf(r)<0; });
-  function fila(r){ var hecho=!!servidos[r.sid], no=subio[r.sid]==='no', me=typeof menuElegido==='function'?menuElegido(r):null, men=me&&!me.esp?me.t:(r.menu||'');
-    return '<div class="ah-f'+(hecho?' ok':'')+(no?' no':'')+'"><button class="c" '+(no?'disabled':'onclick="toggleServido('+r.sid+');guardar();ahPintaLista();sxInicio()"')+'>'+(hecho?'✓':no?'🚫':'')+'</button>'+
-      '<div class="d" onclick="ficha(\''+ahKey(r)+'\')"><b>'+(varios?'<i>Coche '+cocheVer(r.coche)+' · </i>':'')+ahAs(r)+'</b><small>'+limpio(estCorto(r.origen))+' → '+limpio(estCorto(r.destino))+(men?' · '+limpio(capital(men)):'')+'</small>'+(r.especial?'<em>⚠️ '+limpio(String(r.especial))+'</em>':'')+'</div>'+
-      '<button class="m" onclick="ficha(\''+ahKey(r)+'\')">⋯</button></div>'; }
-  var pend=ab.filter(ahPend).length;
-  var h='<div class="sh-handle"></div><div class="sx-hoja"><div class="ah-lt"><div><div class="sx-as" style="font-size:24px">'+m.e+' '+limpio(m.n)+'</div><div class="sx-sub" style="margin:0">'+(pend?'Faltan '+pend+' de '+ab.length:'✓ Todo servido')+'</div></div><button class="ah-x" onclick="cerrar()">✕</button></div>'+
-    ab.sort(function(a,b){ return (ahPend(b)-ahPend(a))||(a.coche-b.coche)||(a.fila-b.fila); }).map(fila).join('')+
-    (otros.length?'<details class="sx-antes"><summary>Otros tramos ('+otros.length+')<small>Ya bajaron o suben más adelante</small></summary>'+otros.map(fila).join('')+'</details>':'')+
-    '<button class="sx-cerrar" onclick="cerrar()">Cerrar</button></div>';
-  sxPon(h,'ah-lista');
-}
-// «＋» Añadir pasajero: primero coche y asiento; después, el formulario de siempre
-var AHN={c:null, a:''};
-function ahNuevo(){ AHN={c:coche||COCHES[0]||1, a:''}; hoja='ah-nuevo'; fichaAbierta=null; ahPintaNuevo(); document.getElementById('ov-asiento').classList.add('on'); }
-function ahPintaNuevo(){
-  var cs=(COCHES.length?COCHES:[1,2,3,4,5,6,7,8]);
-  sxPon('<div class="sh-handle"></div><div class="sx-hoja"><div class="sx-as" style="font-size:24px">＋ Añadir pasajero</div><div class="sx-sub">Para el que no viene en el MOL o para ir poniendo a mano.</div>'+
-    '<div class="f-lbl" style="font-size:13px">🚃 Coche</div><div class="ah-cs">'+cs.map(function(c){ return '<button class="'+(c===AHN.c?'on':'')+'" onclick="AHN.c='+c+';ahPintaNuevo()">'+cocheVer(c)+'</button>'; }).join('')+'</div>'+
-    '<div class="f-lbl" style="font-size:13px;margin-top:10px">💺 Asiento</div><input class="inp" id="ah-as" placeholder="p. ej. 07A" value="'+limpio(AHN.a)+'" oninput="AHN.a=this.value" style="font-size:22px;font-weight:900;letter-spacing:2px;text-transform:uppercase">'+
-    '<button class="sx-gbtn sx-gr" style="margin-top:14px" onclick="ahNuevoSig()"><span>➡️</span><div>Seguir</div></button><button class="sx-cerrar" onclick="cerrar()">Cancelar</button></div>','ah-nuevo');
-}
-function ahNuevoSig(){ var m=String(AHN.a||'').toUpperCase().replace(/\s/g,'').match(/^(\d{1,2})([A-Z])$/); if(!m){ toast('Escribe el asiento, p. ej. 07A'); return; }
-  var key=AHN.c+'-'+pad(+m[1])+m[2]; if(ASIENTOS[key]&&ASIENTOS[key].length){ cerrar(); ficha(key); return; } cerrar(); abrirExtra(key); }
-// ⚙️ Más opciones: todo lo demás, en una lista
-function ahMenu(){ hoja='ah-menu'; fichaAbierta=null; var Q=typeof sqActual==='function'?sqActual():null;
-  function op(e,t,s,f){ return '<button class="ah-op" onclick="'+f+'"><span>'+e+'</span><div>'+t+(s?'<small>'+s+'</small>':'')+'</div><i>›</i></button>'; }
-  sxPon('<div class="sh-handle"></div><div class="sx-hoja"><div class="sx-as" style="font-size:24px">☰ Más opciones</div>'+
-    '<div class="ah-h">EL SERVICIO</div>'+(Q?op('📋','Secuencia completa','Paradas, tareas y «¿Qué le toca?»',"cerrar();abrirSecuencia('ahora')"):'')+
-    op('🧍','Comprobar quién sube','Marcar subió / no subió con un toque',"cerrar();modoClip=true;goP('mapa')")+
-    (LEIDO?op('📝','Revisar lo leído del MOL','Corregir una fila mal leída',"cerrar();mostrarComprobacion()"):'')+
-    op('🚆','Serie del tren','Cambiar la serie / el plano',"cerrar();abrirSerie()")+op('➕','Añadir coches','Si falta algún coche en el plano',"cerrar();abrirAnadirCoche()")+op('🔄','Girar el plano','Ver el coche al revés',"cerrar();girarVista();goP('mapa')")+
-    '<div class="ah-h">COMPAÑEROS</div>'+op('📤','Compartir el MOL','Con PIN',"cerrar();abrirCompartir()")+
-    '<div class="ah-h">OTROS</div>'+op('🧰','Ver todas las opciones','La pantalla completa de antes',"cerrar();SX.mas=true;goP('tren');sxInicio()")+
-    op('🗑','Borrar y empezar otro servicio','',"cerrar();borrarServicio()")+(document.getElementById('tema-btn')&&document.getElementById('tema-btn').classList.contains('on')?op('🎨','Estilo de temporada','',"cerrar();temaPanel()"):'')+
-    '<button class="sx-cerrar" onclick="cerrar()">Cerrar</button></div>','ah-menu');
-  document.getElementById('ov-asiento').classList.add('on'); }
-// Botón «＋» flotante y ⚙️ arriba, solo con servicio cargado
-function ahFlotantes(){ var on=cargado&&!(MANUAL&&MANUAL.editando);
-  var f=document.getElementById('ah-fab'); if(!f){ f=document.createElement('button'); f.id='ah-fab'; f.textContent='＋'; f.title='Añadir pasajero'; f.onclick=ahNuevo; document.body.appendChild(f); }
-  var g=document.getElementById('ah-gear'); if(!g){ var pb=document.getElementById('perfil-btn'); if(pb){ g=document.createElement('button'); g.id='ah-gear'; g.className='hbtn'; g.textContent='☰'; g.title='Más opciones'; g.onclick=ahMenu; pb.parentNode.insertBefore(g,pb); } }
-  var vis=on&&!document.getElementById('p-check').classList.contains('on'); f.style.display=vis?'':'none'; if(g) g.style.display=vis?'':'none';
-  var nt=document.querySelector('#nav-tren .bl'), ni=document.querySelector('#nav-tren .bi'); if(nt){ nt.textContent=cargado?'AHORA':'TREN'; ni.textContent=cargado?'▶️':'🚆'; }
-  document.body.classList.toggle('ah-on', on); }
-// «Ahora» en lugar del inicio de siempre (con servicio cargado)
-var _ahIni=sxInicio;
-sxInicio=function(){ _ahIni(); ahFlotantes(); if(!cargado||SX.mas||(MANUAL&&MANUAL.editando)) return;
-  var el=document.getElementById('sx-inicio'); if(!el) return; el.innerHTML=ahAhoraHTML(); };
-// Ficha del asiento: un botón grande y, debajo, cuatro pequeños
-var _ahFicha=ficha;
-ficha=function(key){ _ahFicha(key); if(SX.full===key) return; var hj=document.querySelector('#sh-asiento .sx-hoja'); if(!hj) return;
-  hj.querySelectorAll('.sx-dos').forEach(function(dos){ var nn=dos.querySelector('.nn'), mv=dos.nextElementSibling; while(mv&&!mv.classList.contains('sx-mover')) mv=mv.nextElementSibling;
-    var sid=(nn&&(nn.getAttribute('onclick')||'').match(/setSube\((\d+)/)||[])[1], r=sid?filaPorSid(+sid):null; if(!r) return;
-    var no=subio[r.sid]==='no', g=document.createElement('div'); g.className='ah-btns';
-    g.innerHTML='<button onclick="setSube('+r.sid+',\''+(no?'':'no')+'\');refrescar();sxInicio()">'+(no?'↩ Sí subió':'🚫 No subió')+'</button>'+
-      '<button onclick="empezarMover('+r.sid+')">🔁 Cambiar asiento</button>'+
-      '<button onclick="SX.full=\''+key+'\';ficha(\''+key+'\')">✏️ Modificar</button>'+
-      ((r.manual||r.extra)?'<button onclick="if(confirm(\'¿Quitar este pasajero?\')){quitarDeLista('+r.sid+');reindexar();guardar();cerrar();refrescar();sxInicio()}">🗑 Quitar</button>':'<button onclick="cerrar();abrirExtra(\''+key+'\')">➕ Otro pasajero</button>');
-    var after=mv||dos; after.parentNode.insertBefore(g, after.nextSibling); dos.style.display='none'; if(mv) mv.style.display='none'; });
-  // «servido» también refresca «Ahora»
-  hj.querySelectorAll('.sx-ok1').forEach(function(b){ var oc=b.getAttribute('onclick'); if(oc&&oc.indexOf('sxInicio')<0) b.setAttribute('onclick', oc+';sxInicio()'); });
-  // «¿Qué le toca según la secuencia?», plegado
-  hj.querySelectorAll('.sq-ficha').forEach(function(q){ if(q.querySelector('.sx-alerta')) return; var d=document.createElement('details'); d.className='ah-sq'; d.innerHTML='<summary>📋 ¿Qué le toca según la secuencia?</summary>'; q.parentNode.insertBefore(d,q); d.appendChild(q); });
-  var mas=hj.querySelector('.sx-mas'); if(mas) mas.style.display='none'; };
-var _ahCerrar=cerrar; cerrar=function(){ var era=hoja; _ahCerrar(); if(era==='ah-lista'&&cargado) sxInicio(); };
-var _ahMover=empezarMover; empezarMover=function(sid){ _ahMover(sid); setTimeout(ahFlotantes,0); };
+/* ── PRUEBA · «Más opciones» con servicio cargado: solo «Borrar y empezar otro» ──
+   Antes volvía a salir todo el inicio (subir MOL, a mano…) aunque ya hubiera un servicio.
+   Ahora solo queda el botón para borrar el servicio; al borrarlo, la pantalla vuelve a quedar en blanco. */
+var _moIni=sxInicio;
+sxInicio=function(){ _moIni();
+  var pt=document.getElementById('p-tren'), el=document.getElementById('sx-inicio'); if(!pt||!el) return;
+  var solo=cargado&&SX.mas&&!(MANUAL&&MANUAL.editando), b=document.getElementById('mo-borrar');
+  pt.classList.toggle('mo-solo', solo);
+  if(!solo){ if(b) b.remove(); return; }
+  if(!b){ b=document.createElement('div'); b.id='mo-borrar'; }
+  b.innerHTML='<button onclick="borrarServicio()">🗑️ Borrar este servicio y empezar otro</button><div>Se borra lo marcado y la pantalla vuelve a quedar en blanco.</div>';
+  if(b.previousElementSibling!==el) el.parentNode.insertBefore(b, el.nextSibling);
+};
 (function(){ var st=document.createElement('style'); st.textContent=
-  '.ah-vamos{background:#7C2D12;border:2px solid #F59E0B;border-radius:16px;padding:10px 13px;margin:4px 0 10px}.ah-vamos small{display:block;font-size:11.5px;font-weight:900;color:#FCD34D;letter-spacing:1px}.ah-vamos b{font-size:21px}'+
-  '.ah-suben{background:#1E40AF;border-radius:14px;padding:11px 13px;margin-bottom:10px;font-size:16px;font-weight:900}'+
-  '.ah-tarj{border-radius:18px;padding:13px 14px;margin-bottom:10px;color:#fff;cursor:pointer;box-shadow:0 3px 10px #0004}.ah-tarj.hecha{opacity:.6}'+
-  '.ah-tarj .t{display:flex;justify-content:space-between;align-items:center;font-size:21px;font-weight:900}.ah-tarj .t b{font-size:14px;background:#0005;border-radius:10px;padding:3px 10px}'+
-  '.ah-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.ah-chips span{background:#ffffff33;border-radius:9px;padding:5px 9px;font-size:15px;font-weight:900}.ah-chips i{font-style:normal;font-size:11px;opacity:.85}'+
-  '.ah-ok{font-size:14px;font-weight:800;margin-top:4px}.ah-luego{font-size:13.5px;color:#CBD5E1;font-weight:700;margin:2px 2px 10px;line-height:1.4}'+
-  '.ah-lleg{margin-top:4px}'+
-  '#ah-fab{position:fixed;right:16px;bottom:calc(80px + env(safe-area-inset-bottom));z-index:40;width:60px;height:60px;border-radius:50%;border:0;background:#F59E0B;color:#111;font:900 34px Inter,sans-serif;box-shadow:0 6px 16px #0008;cursor:pointer;line-height:1}'+
-  '.ah-lt{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}.ah-x{background:#1E293B;border:0;border-radius:10px;width:40px;height:40px;color:#E2E8F0;font-size:18px}'+
-  '.ah-f{display:flex;align-items:center;gap:11px;background:#13243F;border-radius:14px;padding:10px;margin-bottom:8px}.ah-f.ok{opacity:.55}.ah-f.no{opacity:.45}'+
-  '.ah-f .c{width:40px;height:40px;flex:none;border-radius:11px;border:3px solid #64748B;background:none;color:#fff;font:900 20px Inter,sans-serif}.ah-f.ok .c{background:#16A34A;border-color:#16A34A}'+
-  '.ah-f .d{flex:1;min-width:0;cursor:pointer}.ah-f .d b{font-size:20px;color:#fff}.ah-f .d b i{font-style:normal;font-size:13px;color:#94A3B8}.ah-f .d small{display:block;font-size:12.5px;color:#94A3B8;font-weight:700}.ah-f .d em{display:block;font-style:normal;font-size:12.5px;color:#FCA5A5;font-weight:800}'+
-  '.ah-f .m{background:none;border:0;color:#94A3B8;font-size:24px;font-weight:900;padding:0 6px}'+
-  '.ah-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 12px}.ah-btns button{background:#1E293B;border:1.5px solid #334155;border-radius:13px;padding:12px 6px;color:#E2E8F0;font:800 14.5px Inter,sans-serif;cursor:pointer}'+
-  '.ah-sq{margin:4px 0 10px}.ah-sq summary{color:#93C5FD;font-weight:800;font-size:14.5px;cursor:pointer;padding:6px 2px}'+
-  '.ah-cs{display:flex;flex-wrap:wrap;gap:7px}.ah-cs button{min-width:52px;border:2px solid #334155;background:#13243F;color:#E2E8F0;border-radius:12px;padding:10px;font:900 17px Inter,sans-serif}.ah-cs button.on{border-color:#F59E0B;background:#7C2D12}'+
-  '.ah-h{font-size:12px;font-weight:900;color:#94A3B8;letter-spacing:1px;margin:14px 2px 6px}'+
-  '.ah-op{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#13243F;border:0;border-radius:14px;padding:12px;margin-bottom:7px;color:#F8FAFC;font:800 16px Inter,sans-serif;cursor:pointer}.ah-op span{font-size:22px;width:30px;text-align:center}.ah-op div{flex:1}.ah-op small{display:block;font-size:12px;color:#94A3B8;font-weight:600}.ah-op i{font-style:normal;color:#64748B}'+
-  /* Asientos más limpios: sin el banner de comprobar ni las pestañas (están en ⚙️) */
-  'body.ah-on #sx-mapa .sx-clip:not(.on),body.ah-on #sx-mapa .sx-tog,body.ah-on #sx-mapa .sx-lleg{display:none!important}#ah-gear{font-size:20px;font-weight:900}';
+  '#p-tren.mo-solo>*:not(#sx-inicio):not(#mo-borrar){display:none!important}'+
+  '#mo-borrar{margin:4px 0 24px}#mo-borrar button{width:100%;background:#7F1D1D;border:2px solid #F87171;color:#fff;border-radius:16px;padding:16px;font:900 18px Inter,sans-serif;cursor:pointer}'+
+  '#mo-borrar div{text-align:center;font-size:12.5px;color:#94A3B8;margin-top:8px}';
   document.head.appendChild(st); })();
 
 restaurar();
