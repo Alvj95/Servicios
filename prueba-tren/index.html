@@ -37621,7 +37621,7 @@ window.pinta=pinta; function pinta(){
   var o=ov(), h='<div class="mt-in"><div class="mt-barra"><button class="mt-back" onclick="'+(MT.vista==='tren'?'MT_volver()':'mtCerrar()')+'">← Volver</button>'+(MT.vista==='tren'?'<button class="mt-otro" onclick="MT_otro()">🔁 Otro tren</button>':'')+'</div>';
   if(MT.vista==='buscar'){
     var hoy=mtHoy(), rec=(mtG().rec||[]).filter(function(x){ return !hoy.some(function(y){ return y.n===x; }); });
-    h+='<div class="mt-tit">¿Qué tren buscas?</div><input id="mt-num" class="mt-inp" inputmode="numeric" placeholder="Nº de tren" oninput="mtBusca(this.value)"><div id="mt-res"></div>'+
+    h+='<div class="mt-tit">¿Qué tren buscas?</div><form class="mt-busca" onsubmit="event.preventDefault();MT_ir();return false"><input id="mt-num" class="mt-inp" inputmode="numeric" enterkeyhint="search" placeholder="Nº de tren" oninput="mtBusca(this.value)"><button type="submit">Buscar</button></form><div id="mt-res"></div>'+
       (hoy.length?'<div class="mt-lbl">MIS TRENES DE HOY</div>'+hoy.map(function(x){ return filaTren(x.n); }).join(''):'')+
       (rec.length?'<div class="mt-lbl">ÚLTIMOS QUE MIRASTE</div>'+rec.map(filaTren).join(''):'')+estado();
     o.innerHTML=h+'</div>'; quitaMapa(); var i=document.getElementById('mt-num'); if(i&&MT.q){ i.value=MT.q; mtBusca(MT.q); } return;
@@ -37642,7 +37642,7 @@ window.pinta=pinta; function pinta(){
       if(lleg!=null){ var q=lleg-y; if(q<-720) q+=1440; falta=si===0&&!(v&&v.estAnt)?'Sale de '+P[0].nombre+(q>0?' en ~'+q+' min':' ahora'):q>0?'Llega a '+P[si].nombre+' en ~'+q+' min':'Llegando a '+P[si].nombre; } }
     h+='<div class="mt-tl">'+P.map(function(e,i){ var hp=i===P.length-1?e.llega:(e.sale||e.llega), m=aMin(hp), est=d&&m!=null?aHora(m+d):'', ya=si>=0&&i<si;
       return (i===si&&falta&&si>0?'<div class="mt-trn"><i>🚆</i><span>'+esc(falta)+'</span></div>':'')+
-        '<div class="mt-st'+(ya?' ya':'')+(i===si?' sig':'')+'"><div class="n">'+esc(e.nombre||e.cod)+'</div><div class="h">'+(i===0?'Salida ':i===P.length-1?'Llegada ':'')+(est?'<s>'+hp+'</s><b>'+est+'</b>':(hp||''))+'</div></div>'+
+        '<div class="mt-st'+(ya?' ya':'')+(i===si?' sig':'')+'"><div class="n">'+esc(e.nombre||('Estación '+e.cod))+'</div><div class="h">'+(i===0?'Salida ':i===P.length-1?'Llegada ':'')+(est?'<s>'+hp+'</s><b>'+est+'</b>':(hp||''))+'</div></div>'+
         (i===0&&si===0&&falta?'<div class="mt-trn"><i>🚆</i><span>'+esc(falta)+'</span></div>':''); }).join('')+'</div>';
   }
   if(v&&v.mat) h+='<div class="mt-mini">Composición '+esc(v.mat)+'</div>';
@@ -37662,6 +37662,7 @@ function mtCargaDet(n,cb){ n=num(n); MT.det=MT.det||{}; var x=MT.det[n]; if(x&&D
 function mtSigIdx(P,v,d){ if(!P.length) return -1; var cs=v&&String(v.codEstSig||'').replace(/^0+/,'');
   for(var i=0;i<P.length;i++) if(cs&&String(P[i].cod).replace(/^0+/,'')===cs) return i;
   if(!v) return -1; var y=ahoraMin(); for(i=0;i<P.length;i++){ var m=aMin(P[i].llega||P[i].sale); if(m!=null&&m+(d||0)>y) return i; } return P.length-1; }
+window.MT_ir=function(){ var i=document.getElementById('mt-num'), n=num(i&&i.value); if(n.length<2){ if(typeof toast==='function') toast('Escribe el número del tren'); return; } if(i) i.blur(); mtAbrir(n); };
 window.MT_otro=function(){ MT.vista='buscar'; MT.hoja=false; MT.q=''; pinta(); var i=document.getElementById('mt-num'); if(i){ i.focus(); } };
 window.MT_volver=function(){ MT.vista='buscar'; MT.hoja=false; pinta(); };
 function estado(){ return '<div class="mt-mini">'+(MT.live?'📡 Directo de Renfe: '+Object.keys(MT.live).length+' trenes circulando ahora':MT.liveErr?'📡 Directo de Renfe: '+esc(MT.liveErr):'📡 Conectando con Renfe…')+' · versión de prueba</div>'; }
@@ -37731,6 +37732,7 @@ var st=document.createElement('style'); st.textContent=
  '.mt-st .n{font-size:16.5px;font-weight:800;color:#fff}.mt-st.ya .n{color:#94A3B8}.mt-st.sig .n{color:#FCD34D}.mt-st .h{font-size:13.5px;color:#94A3B8;font-weight:700}.mt-st .h s{opacity:.7;margin-right:6px}.mt-st .h b{color:#F87171}.mt-st.ya .h b{color:#86EFAC}'+
  '.mt-trn{position:relative;margin:-2px 0 10px -36px;display:flex;align-items:center;gap:8px;z-index:2}.mt-trn i{width:32px;height:32px;border-radius:50%;background:#DC2626;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:15px;flex:none}'+
  '.mt-trn span{background:#1E293B;border:1.5px solid #DC2626;border-radius:10px;padding:6px 10px;font-size:13.5px;font-weight:800;color:#fff}'+
+ '.mt-busca{display:flex;gap:8px;align-items:stretch;margin:8px 0 10px}.mt-busca .mt-inp{margin:0;flex:1;min-width:0}.mt-busca button{background:#16A34A;color:#fff;border:0;border-radius:14px;padding:0 16px;font:900 17px Inter,sans-serif;cursor:pointer}'+
  '.mt-barra{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.mt-barra .mt-back{margin-bottom:0}.mt-otro{background:#2563EB;border:0;border-radius:10px;padding:8px 13px;color:#fff;font:900 14px Inter,sans-serif;cursor:pointer}'+
  '.mt-aviso{background:#1E293B;border:2px dashed #64748B;border-radius:14px;padding:12px;font-size:14px;line-height:1.45;margin:6px 0 10px}'+
  '.mt-btn{width:100%;background:#F59E0B;color:#111;border:0;border-radius:14px;padding:14px;font:900 17px Inter,sans-serif;cursor:pointer;margin-bottom:6px}'+
