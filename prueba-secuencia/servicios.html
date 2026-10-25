@@ -3869,9 +3869,68 @@ document.addEventListener('visibilitychange', function(){ if(document.hidden) sq
  document.head.appendChild(s); })();
 setTimeout(function(){ sqaAvProgramar(true); }, 2500);
 
+
+/* ═══ NUEVO — Plano automático y servicio por el tramo (trenes con ficha de secuencia) ═══
+   - En el plano, con la secuencia en automático y señal de Renfe, no hace falta «Llegamos a…»:
+     una línea dice la próxima parada y a qué hora cambia sola. Sin señal vuelve el botón.
+   - Poniendo servicios a mano: la subida es la parada en la que estáis, se elige dónde baja y la
+     app pone el servicio que toca según la pirámide de la ficha. Debajo se puede cambiar a mano. */
+function sqpQ(){ return MANUAL&&MANUAL.seq?sqDe(MANUAL.seq):(cargado?sqActual():null); }
+// Índice en la ruta del servicio a mano de la parada en la que estáis
+function sqpParadaRuta(){ if(!MANUAL||!MANUAL.ruta) return 0; var P=sxParadas(), e=P[Math.min(sxParadaIdx(),P.length-1)]; if(!e) return 0;
+  var n=estacion(e).nombre; for(var i=0;i<MANUAL.ruta.length;i++) if(estacion(MANUAL.ruta[i]).nombre===n) return i; return 0; }
+// Servicio que toca para un tramo de la ruta (o null si la ficha no lo dice)
+function sqpServicio(Q,a,b){ var T=sqTipo(Q,a,b); if(!T) return null; var k=SQ_TIPO[T].k; return MANUAL.svs.indexOf(k)>-1?k:null; }
+function sqpPon(k,a,b){ MANUAL.act=MANUAL.svs.indexOf(k); MANUAL.tramo[k]=[a,b]; MANUAL.paso=0; filtro=k; }
+
+/* ── «Estás poniendo»: lo decide el tramo ── */
+var _sqpMan=pintarManual;
+pintarManual=function(){
+  _sqpMan();
+  var el=document.getElementById('manual-bar'), Q=MANUAL&&MANUAL.seq&&sqDe(MANUAL.seq); if(!el||!Q||!MANUAL.editando) return;
+  var R=MANUAL.ruta, n=R.length, k=MANUAL.svs[MANUAL.act], t=MANUAL.tramo[k]||[0,n-1], a=t[0], b=t[1];
+  // La subida va con la parada en la que estáis (cuando cambia la parada, se pone sola)
+  var p=Math.min(sqpParadaRuta(), n-2);
+  if(MANUAL.pzParada!==p){ MANUAL.pzParada=p; a=p; if(b<=a) b=n-1; MANUAL.pzMano=false; var kk=sqpServicio(Q,a,b); if(kk){ sqpPon(kk,a,b); k=kk; } else MANUAL.tramo[k]=[a,b]; guardar(); }
+  var auto=sqpServicio(Q,a,b), cod=sqCod(Q,a,b), txt=cod&&SQ_COD[cod]?SQ_COD[cod].txt:COMIDAS[k].e+' '+COMIDAS[k].n, ops=MENUS_MAN[k], ba='', i;
+  for(i=a+1;i<n;i++) ba+='<button class="'+(i===b?'on':'')+'" onclick="sqpBaja('+i+')">'+limpio(estCorto(R[i]))+'</button>';
+  el.innerHTML='<div class="sx-pone" style="background:'+COMIDAS[k].c+'"><div class="t">ESTÁS PONIENDO</div>'+
+    '<div class="tr">🟢 Sube en '+limpio(estCorto(R[a]))+' <button onclick="sxTramo()">Cambiar</button></div>'+
+    '<div class="sqp-l">🔴 BAJA EN</div><div class="sqp-ch">'+ba+'</div>'+
+    '<div class="sqp-toca" style="color:'+COMIDAS[k].c+'">'+(MANUAL.pzMano&&auto!==k?COMIDAS[k].e+' Puesto a mano: '+COMIDAS[k].n:'Le toca: '+limpio(txt))+
+      '<small>'+(MANUAL.pzMano&&auto!==k?'La secuencia dice '+(auto?COMIDAS[auto].n.toLowerCase():'otra cosa')+' para '+limpio(estCorto(R[a]))+' → '+limpio(estCorto(R[b])):'Lo dice la secuencia del '+Q.tren+' ('+limpio(estCorto(R[a]))+' → '+limpio(estCorto(R[b]))+')')+'</small></div>'+
+    '<div class="sqp-l">¿NO ES ESO? CÁMBIALO A MANO</div><div class="sqp-ch">'+MANUAL.svs.map(function(x){ return '<button class="'+(x===k?'on':'')+'" onclick="sqpMano(\''+x+'\')">'+COMIDAS[x].e+' '+COMIDAS[x].n+'</button>'; }).join('')+'</div></div>'+
+    '<div class="sx-toques">'+ops.map(function(m,i){ return '<span>'+(i?(i+1)+':':'1 toque:')+' '+m+'</span>'; }).join('')+'<span>'+(ops.length+1)+': quitar</span></div>'+
+    '<button class="sx-gbtn sx-gr" style="padding:12px 16px;font-size:17px" onclick="terminarManual()"><span style="font-size:22px">✓</span><div>Listo, a servir</div></button>';
+};
+window.sqpBaja=function(b){ var Q=sqDe(MANUAL.seq), k=MANUAL.svs[MANUAL.act], a=(MANUAL.tramo[k]||[0])[0], kk=sqpServicio(Q,a,b);
+  MANUAL.pzMano=false; sqpPon(kk||k,a,b); guardar(); pintarMapa(); };
+window.sqpMano=function(k){ var t=MANUAL.tramo[MANUAL.svs[MANUAL.act]]; MANUAL.pzMano=true; sqpPon(k,t[0],t[1]); guardar(); pintarMapa(); };
+// «Cambiar» (sube y baja) ya elige el servicio por la secuencia: vuelve a lo automático
+var _sqpTramoOk=sxTramoOk; sxTramoOk=function(){ if(MANUAL&&MANUAL.seq){ MANUAL.pzMano=false; MANUAL.pzParada=sqpParadaRuta(); } _sqpTramoOk(); };
+
+/* ── En el plano: «Llegamos a…» solo cuando hace falta ── */
+function sqpPlano(){ var bt=document.querySelector('#sx-mapa .sx-lleg'), vie=document.getElementById('sqp-auto'); if(vie) vie.remove(); if(bt) bt.style.display='';
+  var Q=sqpQ(), A=sqaG(); if(!Q||!A.on||!bt) return;
+  var st=sqaEst(A,Q), r=sqaRetraso(A,st), k=sqBloqueAhora(Q), j=-1; for(var i=k+1;i<Q.bloques.length;i++) if(Q.bloques[i].est>0){ j=i; break; }
+  var ret=r.min>0?'+'+r.min+' min':r.min<0?(-r.min)+' min adelantado':'en hora', sig=j>-1?'<b>'+limpio(sqaNombre(Q.bloques[j]))+' a las '+sqaHora(sqaHoraBloque(Q,j,r.min))+'</b>':'';
+  if(r.de==='renfe'&&st.espera==null){ bt.style.display='none';
+    bt.insertAdjacentHTML('beforebegin','<div id="sqp-auto" class="sqp-auto"><b>🤖 Automático · '+ret+'</b> · Renfe en directo'+(sig?'<br>Próxima parada: '+sig+' (cambia sola)':'')+'</div>'); }
+  else bt.insertAdjacentHTML('beforebegin','<div id="sqp-auto" class="sqp-auto sin"><b>⏳ Sin señal de Renfe</b> · '+(r.de==='horario'?'uso el horario de la ficha':'uso el último retraso ('+ret+')')+'<br>Si llegáis antes o después, pulsa al llegar:</div>');
+}
+var _sqpMapa=sxMapa; sxMapa=function(){ _sqpMapa(); try{ sqpPlano(); }catch(e){} };
+var _sqpTick=sqaTick; sqaTick=function(){ _sqpTick(); try{ if(document.querySelector('#sx-mapa .sx-lleg')) sqpPlano(); if(MANUAL&&MANUAL.editando&&MANUAL.seq&&MANUAL.pzParada!==sqpParadaRuta()) pintarMapa(); }catch(e){} };
+(function(){ var s=document.createElement('style'); s.textContent=
+ '.sqp-l{font-size:11.5px;font-weight:900;letter-spacing:.5px;opacity:.85;margin:10px 0 5px}'+
+ '.sqp-ch{display:flex;flex-wrap:wrap;gap:6px}.sqp-ch button{background:rgba(0,0,0,.25);border:0;color:#fff;border-radius:9px;padding:7px 10px;font:800 13px Inter,sans-serif;cursor:pointer}.sqp-ch button.on{background:#fff;color:#111}'+
+ '.sqp-toca{background:#fff;border-radius:12px;padding:10px 12px;margin-top:10px;font-weight:900;font-size:17px;line-height:1.25}.sqp-toca small{display:block;font-size:11.5px;font-weight:700;color:#475569;margin-top:3px}'+
+ '.sqp-auto{background:#052e1a;border:1px solid #16A34A;color:#86EFAC;border-radius:14px;padding:11px 13px;font-size:13.5px;line-height:1.45;margin:4px 0 10px}.sqp-auto b{color:#fff}'+
+ '.sqp-auto.sin{background:#2A1C05;border-color:#F59E0B;color:#FCD34D;margin-bottom:6px}';
+ document.head.appendChild(s); })();
+
 /* SOLO VERSIÓN DE PRUEBA: botón para probar con otra hora (no va en la app oficial) */
 (function(){ var b=document.createElement('button'); b.id='sqa-reloj-prueba';
-  b.style.cssText='position:fixed;right:8px;top:6px;z-index:99998;background:#F59E0B;color:#111;border:0;border-radius:10px;padding:6px 9px;font:900 11px Inter,sans-serif;box-shadow:0 4px 12px #0007;cursor:pointer';
+  b.style.cssText='position:fixed;right:8px;bottom:118px;z-index:99998;opacity:.92;background:#F59E0B;color:#111;border:0;border-radius:10px;padding:6px 9px;font:900 11px Inter,sans-serif;box-shadow:0 4px 12px #0007;cursor:pointer';
   function pinta(){ var d=new Date(Date.now()+(window.SQA_DESFASE||0)); b.textContent='🕐 Hora de prueba: '+d.getHours()+':'+('0'+d.getMinutes()).slice(-2)+(window.SQA_DESFASE?' (simulada)':' (real)'); }
   b.onclick=function(){ var v=prompt('Hora para probar (HH:MM). Vacío = hora real.', ''); if(v==null) return; var m=String(v).match(/(\d{1,2}):(\d{2})/);
     if(!m){ window.SQA_DESFASE=0; } else { var d=new Date(), t=new Date(d); t.setHours(+m[1], +m[2], 0, 0); window.SQA_DESFASE=t-d; }
