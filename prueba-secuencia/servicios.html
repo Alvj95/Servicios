@@ -3927,32 +3927,95 @@ var _sqpTick=sqaTick; sqaTick=function(){ _sqpTick(); try{ if(document.querySele
  '.sqp-auto{background:#052e1a;border:1px solid #16A34A;color:#86EFAC;border-radius:14px;padding:11px 13px;font-size:13.5px;line-height:1.45;margin:4px 0 10px}.sqp-auto b{color:#fff}'+
  '.sqp-auto.sin{background:#2A1C05;border-color:#F59E0B;color:#FCD34D;margin-bottom:6px}';
  document.head.appendChild(s); })();
-/* ═══ NUEVO — Tren acoplado y aviso cuando Renfe no da datos ═══
-   Algunos trenes van acoplados a otro (p. ej. el 3991 de Málaga con el 3931 de Sevilla desde
-   Córdoba) y Renfe solo da los datos con el otro número. Si Renfe no tiene el tren, se usa el
-   retraso del acoplado; si tampoco, se avisa claro de que va por el horario de la ficha. */
+/* ═══ NUEVO — «Añadir el número de Renfe» cuando Renfe no encuentra el tren ═══
+   A veces el número de la ficha no es el que usa Renfe o Adif (p. ej. el 3991 de Málaga va
+   acoplado al 3931 de Sevilla desde Córdoba y Renfe solo da el 3931). Si Renfe no tiene el tren:
+   se prueba el número que haya puesto el tripulante y los acoples conocidos; si tampoco, aviso
+   claro y botón para añadir el número (escrito o elegido entre los que van al mismo destino).
+   La app lo comprueba en Renfe antes de usarlo y lo recuerda para ese tren. */
 var SQA_ACOPLE={'3991':['3931']};
-SQA.sinDatos={};
-function sqaPideTren(n){ return fetch(SQA_PROXY+'?tren='+n+'&v='+Date.now()).then(function(r){ return r.json(); }).then(function(j){ var t=j&&j.tren;
-  if(!t||t.ultRetraso==null||t.ultRetraso==='') return null; var m=+t.ultRetraso; return isNaN(m)||Math.abs(m)>600?null:m; }); }
+// Código de Renfe de las estaciones de destino de las fichas (para proponer trenes al mismo destino)
+var SQA_COD_EST={'Barcelona-Sants':'71801','Madrid-Puerta de Atocha':'60000','Málaga-María Zambrano':'54413','Sevilla-Santa Justa':'51003','Valencia-Joaquín Sorolla':'65000','Granada':'05000'};
+// Tipo de producto de Renfe por tipo de tren (para no proponer Rodalies a un AVE)
+var SQA_PROD={AVE:[2], Avlo:[2], Alvia:[11], Euromed:[13], Altaria:[10,11]};
+SQA.sinDatos={}; SQA.num={};
+function sqaNumG(n){ var o=sqaG().numRenfe||{}; return o[n]||null; }
+function sqaNumP(n,v){ var A=sqaG(); A.numRenfe=A.numRenfe||{}; if(v) A.numRenfe[n]=v; else delete A.numRenfe[n]; sqaP(A); }
+function sqaDet(n){ return fetch(SQA_PROXY+'?tren='+n+'&v='+Date.now()).then(function(r){ return r.json(); }).then(function(j){ return j&&j.tren||null; }); }
+function sqaRet(t){ if(!t||t.ultRetraso==null||t.ultRetraso==='') return null; var m=+t.ultRetraso; return isNaN(m)||Math.abs(m)>600?null:m; }
+// Retraso: el número de la ficha; si Renfe no lo tiene, el puesto por el tripulante y los acoples conocidos
 sqaRenfe=function(){ var Q=sqActual(), A=sqaG(); if(!Q||!A.on||!A.renfe||document.hidden) return; if(Date.now()-SQA.pide<55000) return; SQA.pide=Date.now();
-  var otros=(SQA_ACOPLE[Q.tren]||[]).slice();
+  var otros=[sqaNumG(Q.tren)].concat(SQA_ACOPLE[Q.tren]||[]).filter(function(x,i,l){ return x&&x!==Q.tren&&l.indexOf(x)===i; });
   function guarda(m,con){ var A=sqaG(), st=sqaEst(A,Q); st.ren={min:m, t:Date.now(), con:con||null}; delete SQA.sinDatos[Q.tren]; sqaP(A); sqaTick(); }
   function prueba(){ var n=otros.shift(); if(!n){ SQA.sinDatos[Q.tren]=Date.now(); sqaRefresca(); return; }
-    sqaPideTren(n).then(function(m){ if(m==null) return prueba(); guarda(m,n); }).catch(function(){}); }
-  sqaPideTren(Q.tren).then(function(m){ if(m==null) return prueba(); guarda(m); }).catch(function(){}); };
-// En el recuadro de la secuencia: de dónde sale el retraso
-var _sqaCajaA=sqaCaja; sqaCaja=function(Q){ var h=_sqaCajaA(Q), A=sqaG(); if(!A.on) return h; var st=sqaEst(A,Q), r=sqaRetraso(A,st);
-  if(r.de==='renfe'&&st.ren&&st.ren.con) h=h.replace('📡 Renfe en directo','📡 Renfe en directo · va acoplado al '+st.ren.con);
-  else if(r.de==='ultimo'&&st.ren&&st.ren.con) h=h.replace('📡 último dato de Renfe','📡 último dato de Renfe (acoplado al '+st.ren.con+')');
-  if(SQA.sinDatos[Q.tren]&&r.de!=='renfe') h='<div class="sqa-sind">⚠️ <b>Renfe no da datos del '+Q.tren+' ahora</b>'+((SQA_ACOPLE[Q.tren]||[]).length?' (ni del '+SQA_ACOPLE[Q.tren].join(', ')+', con el que va acoplado)':'')+
-    ': voy por '+(r.de==='horario'?'el horario de la ficha':'el último retraso que tenía')+'. Si vais con retraso, pon la hora de llegada.</div>'+h.replace('<b>Automático · en hora</b>','<b>Automático · sin datos de retraso</b>');
+    sqaDet(n).then(function(t){ var m=sqaRet(t); if(m==null) return prueba(); guarda(m,n); }).catch(function(){}); }
+  sqaDet(Q.tren).then(function(t){ var m=sqaRet(t); if(m==null) return prueba(); guarda(m); }).catch(function(){}); };
+
+/* ── En el recuadro de la secuencia ── */
+var _sqaCajaA=sqaCaja; sqaCaja=function(Q){ var h=_sqaCajaA(Q), A=sqaG(); if(!A.on) return h; var st=sqaEst(A,Q), r=sqaRetraso(A,st), con=st.ren&&st.ren.con;
+  if(r.de==='renfe'&&con) h=h.replace('📡 Renfe en directo','📡 Renfe en directo con el nº <b>'+con+'</b>');
+  else if(r.de==='ultimo'&&con) h=h.replace('📡 último dato de Renfe','📡 último dato de Renfe (nº '+con+')');
+  if(SQA.sinDatos[Q.tren]&&r.de!=='renfe') h='<div class="sqa-sind">⚠️ <b>Renfe no encuentra el tren '+Q.tren+(sqaNumG(Q.tren)?' (ni el '+sqaNumG(Q.tren)+')':'')+' ahora.</b> Voy por '+(r.de==='horario'?'el horario de la ficha, sin retraso':'el último retraso que tenía')+'.<br>A veces el número de la ficha no es el mismo que usa Renfe o Adif (por ejemplo, si va acoplado).</div>'+
+    '<button class="sqa-numbtn" onclick="sqaNumAbrir()">🔢 Añadir el número de Renfe<small>El que sale en Renfe, Adif o en el tren</small></button>'+h.replace('<b>Automático · en hora</b>','<b>Automático · sin datos de retraso</b>');
+  if(SQ.aj){ var n=sqaNumG(Q.tren); h=h.replace(/<\/div>$/,'')+'<div class="sqa-numaj"><span>Número en Renfe: <b>'+(n||'el de la ficha ('+Q.tren+')')+'</b><small>'+(n?'Se recuerda para el '+Q.tren:'Si Renfe no encuentra el tren, añade el que use Renfe')+'</small></span>'+
+      '<button onclick="sqaNumAbrir()">'+(n?'Cambiar':'Añadir')+'</button>'+(n?'<button onclick="sqaNumQuitar()">Quitar</button>':'')+'</div></div>'; }
   return h; };
-// En el plano, lo mismo en la línea de «Automático»
+window.sqaNumQuitar=function(){ var Q=sqActual(); if(!Q) return; sqaNumP(Q.tren,null); var A=sqaG(), st=sqaEst(A,Q); delete st.ren; sqaP(A); SQA.pide=0; sqaRenfe(); toast('Número de Renfe quitado'); pintarSecuencia(); };
+
+/* ── La hoja «¿Con qué número sale este tren en Renfe?» ── */
+window.sqaNumAbrir=function(){ var Q=sqActual(); if(!Q) return; SQA.num={v:sqaNumG(Q.tren)||'', res:null, sug:null};
+  var ov=document.getElementById('sqa-num-ov'); if(!ov){ ov=document.createElement('div'); ov.id='sqa-num-ov'; document.body.appendChild(ov); }
+  ov.className='on'; sqaNumPinta(); sqaSugerencias(Q); setTimeout(function(){ var i=document.getElementById('sqa-num-in'); if(i) i.focus(); },150); };
+window.sqaNumCerrar=function(){ var ov=document.getElementById('sqa-num-ov'); if(ov) ov.className=''; };
+function sqaNumPinta(){ var ov=document.getElementById('sqa-num-ov'), Q=sqActual(); if(!ov||!Q) return; var N=SQA.num, r=N.res, sug=N.sug;
+  ov.innerHTML='<div class="sqa-num-fondo" onclick="sqaNumCerrar()"></div><div class="sqa-num-hoja">'+
+    '<div class="h">¿Con qué número sale este tren en Renfe?</div><div class="p">Mira el número en la app de Renfe, en Adif o en las pantallas de la estación.</div>'+
+    '<form class="f" onsubmit="event.preventDefault();sqaNumBuscar();return false"><input id="sqa-num-in" inputmode="numeric" enterkeyhint="search" placeholder="Nº de tren" value="'+limpio(N.v)+'" oninput="SQA.num.v=this.value.replace(/\\D/g,\'\').slice(0,5);this.value=SQA.num.v"><button type="submit">Buscar</button></form>'+
+    (r?(r.ok?'<div class="ok">✅ <b>Encontrado: '+r.n+'</b><br>'+limpio(r.o)+' → '+limpio(r.d)+'<br>📡 En directo'+(r.m!=null?' · <b class="rt">'+(r.m>0?'+'+r.m+' min de retraso':r.m<0?(-r.m)+' min adelantado':'en hora')+'</b>':'')+'</div>'+
+      '<button class="usar" onclick="sqaNumUsar(\''+r.n+'\')">✓ Usar el '+r.n+' para el '+Q.tren+'</button>'
+      :'<div class="err">❌ No encuentro el '+limpio(r.n)+' en Renfe ahora. Revisa el número.</div>'):'')+
+    (N.buscando?'<div class="p">Buscando en Renfe…</div>':'')+
+    (sug&&sug.length?'<div class="lab">O ELIGE UNO DE LOS QUE VAN A '+limpio(estCorto(Q.paradas[Q.paradas.length-1][0])).toUpperCase()+' AHORA</div>'+
+      sug.map(function(s){ return '<button class="sug" onclick="SQA.num.v=\''+s.n+'\';sqaNumBuscar()"><span><b>'+s.n+'</b> · '+limpio(s.o)+' → '+limpio(s.d)+'</span><i>'+(s.m>0?'+'+s.m+' min':s.m<0?s.m+' min':'en hora')+'</i></button>'; }).join(''):
+      sug?'':'<div class="p">Buscando trenes que van al mismo destino…</div>')+
+    '<button class="no" onclick="sqaNumCerrar()">No lo sé · seguir por el horario</button></div>'; }
+window.sqaNumBuscar=function(){ var n=String(SQA.num.v||'').replace(/^0+/,''); if(n.length<2){ toast('Escribe el número del tren'); return; }
+  SQA.num.buscando=true; SQA.num.res=null; sqaNumPinta();
+  sqaDet(n).then(function(t){ SQA.num.buscando=false; SQA.num.res=t?{ok:true, n:n, o:t.origen||'', d:t.destino||'', m:sqaRet(t)}:{ok:false, n:n}; sqaNumPinta(); })
+    .catch(function(){ SQA.num.buscando=false; SQA.num.res={ok:false, n:n}; sqaNumPinta(); }); };
+window.sqaNumUsar=function(n){ var Q=sqActual(); if(!Q) return; sqaNumP(Q.tren,n); sqaNumCerrar(); SQA.pide=0; sqaRenfe(); toast('✓ Uso el '+n+' para el '+Q.tren); };
+// Trenes que Renfe tiene ahora y van al mismo destino que el de la ficha
+function sqaSugerencias(Q){ var dest=SQA_COD_EST[estacion(Q.paradas[Q.paradas.length-1][0]).nombre]||SQA_COD_EST[Q.paradas[Q.paradas.length-1][0]];
+  if(!dest){ SQA.num.sug=[]; return sqaNumPinta(); }
+  fetch(SQA_PROXY+'?v='+Date.now()).then(function(r){ return r.json(); }).then(function(j){
+    // Solo los del mismo tipo (AVE con AVE…) y primero los de número parecido (3991 → 3931)
+    var prod=SQA_PROD[Q.tipo]||null, yo=+Q.tren;
+    var L=((j&&j.trenes)||[]).filter(function(x){ return x.codDestino===dest&&String(x.codComercial).replace(/^0+/,'')!==Q.tren&&(!prod||prod.indexOf(+x.codProduct)>-1); })
+      .sort(function(x,y){ return Math.abs(+x.codComercial-yo)-Math.abs(+y.codComercial-yo); }).slice(0,6);
+    return Promise.all(L.map(function(x){ var n=String(x.codComercial).replace(/^0+/,'');
+      return sqaDet(n).then(function(t){ return t?{n:n, o:t.origen||'', d:t.destino||'', m:sqaRet(t)||0}:null; }).catch(function(){ return null; }); }));
+  }).then(function(l){ SQA.num.sug=(l||[]).filter(Boolean); sqaNumPinta(); }).catch(function(){ SQA.num.sug=[]; sqaNumPinta(); }); }
+
+/* ── En el plano, lo mismo en la línea de «Automático» ── */
 var _sqpPlanoA=sqpPlano; sqpPlano=function(){ _sqpPlanoA(); var el=document.getElementById('sqp-auto'), Q=sqpQ(); if(!el||!Q) return; var A=sqaG(), st=sqaEst(A,Q);
-  if(st.ren&&st.ren.con&&sqaRetraso(A,st).de==='renfe') el.innerHTML=el.innerHTML.replace('Renfe en directo','Renfe en directo · acoplado al '+st.ren.con);
-  else if(SQA.sinDatos[Q.tren]) el.innerHTML=el.innerHTML.replace('<b>⏳ Sin señal de Renfe</b>','<b>⚠️ Renfe no da datos del '+Q.tren+'</b>'); };
-(function(){ var s=document.createElement('style'); s.textContent='.sqa-sind{background:#3B0A0A;border:1px solid #F87171;color:#FECACA;border-radius:12px;padding:9px 11px;font-size:12.5px;line-height:1.4;margin:10px 0 0}.sqa-sind b{color:#fff}'; document.head.appendChild(s); })();
+  if(st.ren&&st.ren.con&&sqaRetraso(A,st).de==='renfe') el.innerHTML=el.innerHTML.replace('Renfe en directo','Renfe en directo con el nº '+st.ren.con);
+  else if(SQA.sinDatos[Q.tren]) el.innerHTML=el.innerHTML.replace('<b>⏳ Sin señal de Renfe</b>','<b>⚠️ Renfe no encuentra el '+Q.tren+'</b>')+'<button class="sqa-numbtn" style="margin:8px 0 0" onclick="sqaNumAbrir()">🔢 Añadir el número de Renfe</button>'; };
+(function(){ var s=document.createElement('style'); s.textContent=
+ '.sqa-sind{background:#3B0A0A;border:1px solid #F87171;color:#FECACA;border-radius:12px;padding:9px 11px;font-size:12.5px;line-height:1.45;margin:10px 0 0}.sqa-sind b{color:#fff}'+
+ '.sqa-numbtn{display:block;width:100%;background:#2563EB;border:0;color:#fff;border-radius:12px;padding:11px;margin:8px 0 2px;font:900 14.5px Inter,sans-serif;cursor:pointer}.sqa-numbtn small{display:block;font-weight:600;font-size:11px;color:#DBEAFE;margin-top:2px}'+
+ '.sqa-numaj{display:flex;align-items:center;gap:8px;border:1px solid var(--div);background:var(--s2);border-radius:12px;padding:10px 12px;margin:6px 0 4px;font-size:13px}.sqa-numaj span{flex:1}.sqa-numaj small{display:block;color:var(--tx2);font-size:11px;margin-top:2px}'+
+ '.sqa-numaj button{background:transparent;border:1px solid var(--div);color:var(--tx);border-radius:9px;padding:6px 9px;font:800 12px Inter,sans-serif;cursor:pointer}'+
+ '#sqa-num-ov{display:none;position:fixed;inset:0;z-index:99990;font-family:Inter,sans-serif}#sqa-num-ov.on{display:block}.sqa-num-fondo{position:absolute;inset:0;background:rgba(0,0,0,.6)}'+
+ '.sqa-num-hoja{position:absolute;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;max-height:88vh;overflow-y:auto;background:#0D1B2E;border-top:1px solid #1E3350;border-radius:22px 22px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));color:#F8FAFC}'+
+ '.sqa-num-hoja .h{font-size:19px;font-weight:900;line-height:1.25}.sqa-num-hoja .p{font-size:12.5px;color:#94A3B8;margin-top:6px;line-height:1.45}'+
+ '.sqa-num-hoja .f{display:flex;gap:8px;margin-top:12px}.sqa-num-hoja input{flex:1;min-width:0;background:#fff;color:#111;border:0;border-radius:12px;padding:11px;font:900 24px Inter,sans-serif;letter-spacing:3px}.sqa-num-hoja .f button{background:#2563EB;border:0;color:#fff;border-radius:12px;padding:0 16px;font:900 15px Inter,sans-serif}'+
+ '.sqa-num-hoja .lab{font-size:11px;font-weight:800;letter-spacing:1px;color:#94A3B8;margin:14px 0 6px}'+
+ '.sqa-num-hoja .sug{display:flex;justify-content:space-between;gap:8px;width:100%;text-align:left;background:transparent;border:1px solid #334155;color:#E2E8F0;border-radius:12px;padding:9px 11px;margin-bottom:7px;font:600 13px Inter,sans-serif;cursor:pointer}.sqa-num-hoja .sug b{color:#fff}.sqa-num-hoja .sug i{font-style:normal;color:#FCA5A5;font-weight:800;flex:none}'+
+ '.sqa-num-hoja .ok{background:#052e1a;border:1px solid #16A34A;border-radius:14px;padding:12px;margin-top:12px;color:#BBF7D0;font-size:13px;line-height:1.5}.sqa-num-hoja .ok b{color:#fff;font-size:15px}.sqa-num-hoja .ok .rt{color:#FCA5A5;font-size:13px}'+
+ '.sqa-num-hoja .usar{display:block;width:100%;margin-top:10px;background:#16A34A;border:0;color:#fff;border-radius:12px;padding:12px;font:900 15px Inter,sans-serif;cursor:pointer}'+
+ '.sqa-num-hoja .err{background:#3B0A0A;border:1px solid #F87171;border-radius:12px;padding:10px;margin-top:10px;color:#FECACA;font-size:12.5px}'+
+ '.sqa-num-hoja .no{display:block;width:100%;margin-top:12px;background:transparent;border:1px solid #1E3350;color:#94A3B8;border-radius:12px;padding:10px;font:700 13px Inter,sans-serif;cursor:pointer}';
+ document.head.appendChild(s); })();
 
 /* SOLO VERSIÓN DE PRUEBA: botón para probar con otra hora (no va en la app oficial) */
 (function(){ var b=document.createElement('button'); b.id='sqa-reloj-prueba';
