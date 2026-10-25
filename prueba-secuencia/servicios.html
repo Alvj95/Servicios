@@ -3648,7 +3648,7 @@ ficha=function(key){
 var SQA_PROXY='https://xoftsdupynwhzxsiusox.supabase.co/functions/v1/renfe-directo';
 var SQA={pide:0, aviso:null};
 function sqaG(){ try{ var o=JSON.parse(localStorage.getItem(CLAVE+'_sqa')||'{}')||{}; }catch(e){ o={}; }
-  if(o.on==null) o.on=true; if(o.renfe==null) o.renfe=true; if(o.vibrar==null) o.vibrar=true; o.est=o.est||{}; return o; }
+  if(o.on==null) o.on=true; if(o.renfe==null) o.renfe=true; if(o.vibrar==null) o.vibrar=true; if(o.avisos==null) o.avisos=true; if(o.antes==null) o.antes=5; if(o.tocaAv==null) o.tocaAv=true; if(o.soloTA==null) o.soloTA=true; o.est=o.est||{}; return o; }
 function sqaP(o){ try{ localStorage.setItem(CLAVE+'_sqa', JSON.stringify(o)); }catch(e){} }
 function sqaAhora(){ return new Date(Date.now()+(window.SQA_DESFASE||0)); }
 function sqaMinAhora(){ var d=sqaAhora(); return d.getHours()*60+d.getMinutes()+d.getSeconds()/60; }
@@ -3698,9 +3698,9 @@ function sqaTick(){
       if(sinSenal&&!prg[kA]){ prg[kA]=1; st.preg=prg; sqaPon(Q,kA); sqaP(A); sqaPregunta(Q,kA,r); return sqaRefresca(); }
       if(sqaPon(Q,kA)){ sqaP(A); sqaAvisa(Q,kA,r); return sqaRefresca(); } }
   }
-  sqaP(A); sqaRotulo();
+  sqaP(A); sqaRotulo(); sqaAvProgramar();
 }
-function sqaRefresca(){ if(hoja==='sq') try{ pintarSecuencia(); }catch(e){} else sqaRotulo(); }
+function sqaRefresca(){ sqaAvProgramar(); if(hoja==='sq') try{ pintarSecuencia(); }catch(e){} else sqaRotulo(); }
 function sqaVibra(){ if(sqaG().vibrar&&navigator.vibrate) try{ navigator.vibrate([180,90,180]); }catch(e){} }
 function sqaAvisa(Q,k,r){ var bl=Q.bloques[k], t=sqaToca(bl); sqaVibra();
   sqaTarjeta('<div class="sqa-tt">🔔 '+(bl.est===0?'Salimos de ':bl.est===null?'':'Llegando a ')+'<b>'+limpio(sqaNombre(bl))+'</b> ('+sqaHora(sqaHoraBloque(Q,k,r.min))+')</div>'+(t?'<div class="sqa-ts">Toca: '+t+'</div>':''), 9000); }
@@ -3765,7 +3765,7 @@ function sqaCaja(Q){ var A=sqaG(); if(!A.on) return '<div id="sqa-chip" class="s
   else h='<div id="sqa-chip" class="sqa-chip'+cl+'"><i></i><div><b>Automático · '+ret+'</b> · '+de+'<br>'+prox+'</div></div>';
   return h+'<div class="sqa-fila"><button onclick="sqaPideHora()">⏱️ Poner la hora de llegada</button><button onclick="SQ.aj=!SQ.aj;pintarSecuencia()">⚙️ Ajustes</button></div>'+
     (SQ.aj?'<div class="sqa-aj">'+[['on','Cambiar de parada sola','Por la hora de la ficha y el retraso'],['renfe','Usar el retraso de Renfe','Necesita cobertura; si no, el último dato'],['vibrar','Avisar al cambiar (vibrar)','Con lo que toca en esa parada']].map(function(x){
-      return '<button class="sqa-sw" onclick="sqaAjuste(\''+x[0]+'\')"><span>'+x[1]+'<small>'+x[2]+'</small></span><i class="'+(A[x[0]]?'on':'')+'"></i></button>'; }).join('')+'</div>':''); }
+      return '<button class="sqa-sw" onclick="sqaAjuste(\''+x[0]+'\')"><span>'+x[1]+'<small>'+x[2]+'</small></span><i class="'+(A[x[0]]?'on':'')+'"></i></button>'; }).join('')+sqaAjAvisosHTML(A)+'</div>':''); }
 var _sqaPinta=pintarSecuencia; pintarSecuencia=function(){ _sqaPinta(); var Q=sqActual(); if(!Q) return;
   var hj=document.querySelector('.sx-hoja.sq'); if(!hj) return; var tabs=hj.querySelector('.sq-tabs');
   if(tabs&&(SQ.tab==='ahora'||SQ.tab==='paradas')) tabs.insertAdjacentHTML('afterend', sqaChipHTML(Q));
@@ -3794,6 +3794,80 @@ var _sqaPinta=pintarSecuencia; pintarSecuencia=function(){ _sqaPinta(); var Q=sq
 setInterval(function(){ if(!document.hidden){ sqaTick(); sqaRenfe(); } }, 15000);
 document.addEventListener('visibilitychange', function(){ if(!document.hidden){ sqaTick(); sqaRenfe(); } });
 setTimeout(function(){ sqaTick(); sqaRenfe(); }, 1500);
+/* ── Avisos con el móvil bloqueado (como la «Alarma inteligente» de TrenTurnos) ──
+   En la app de Android se dejan programadas en el móvil las notificaciones de las
+   paradas que quedan: unos minutos antes («En 5 min llegáis a…») y al llegar (lo que
+   toca, con «✓ Sí / Todavía no»). Se reprograman cuando cambia el retraso o la parada.
+   Con el móvil bloqueado no se pregunta a Renfe: usan el último retraso que hubiera. */
+var SQA_ID=870000, SQA_CANAL='secuencia';
+SQA.firma=''; SQA.avN=0; SQA.avT=0; SQA.avInexacta=false;
+function sqaLN(){ try{ var C=window.Capacitor; if(!(C&&C.Plugins&&C.Plugins.LocalNotifications)) C=window.parent&&window.parent.Capacitor;
+  var L=C&&C.Plugins&&C.Plugins.LocalNotifications; return L&&C.isNativePlatform&&C.isNativePlatform()?L:null; }catch(e){ return null; } }
+// Hora local de hoy (con setHours, así vale también el día del cambio de hora)
+function sqaFecha(min){ var b=sqaAhora(), m=Math.round(min); b.setHours(0,0,0,0); b.setHours(Math.floor(m/60), m%60, 0, 0); return new Date(b.getTime()-(window.SQA_DESFASE||0)); }
+function sqaTocaLista(bl,soloTA){ return bl.ops.filter(function(o){ return (!soloTA||/TA/.test(o[1]))&&sqDestaca(o); }).map(function(o){ var t=o[3]?SQ_TIPO[o[3]]:SQ_TIPO.BM; return t.e+' '+o[0].replace(/^Servicio( de)? (restauración )?(de )?/i,'').replace(/^./,function(c){ return c.toUpperCase(); }); }); }
+// Lo que hay que programar: por cada parada que queda, «antes» y «al llegar»
+function sqaAvLista(Q,A){ var st=sqaEst(A,Q), r=sqaRetraso(A,st), k=sqBloqueAhora(Q), y=sqaMinAhora(), out=[], ret=r.min>0?' · +'+r.min+' min de retraso':'';
+  Q.bloques.forEach(function(bl,i){ if(i<=k&&st.espera!==i||bl.est===null) return; var t=sqaHoraBloque(Q,i,r.min); if(t<y-0.5&&st.espera!==i) return;
+    var nom=sqaNombre(bl), hh=sqaHora(t), toca=sqaTocaLista(bl,A.soloTA), sale=bl.est===0;
+    if(A.antes>0&&t-A.antes>y+0.5) out.push({id:SQA_ID+i*2, at:sqaFecha(t-A.antes), title:'🚉 En '+A.antes+' min '+(sale?'salís de ':'llegáis a ')+nom+' ('+hh+')',
+      body:(toca.length?'Prepara: '+toca.map(function(x){ return x.replace(/\s*\(.*\)/,''); }).filter(function(x,j,l){ return l.indexOf(x)===j; }).join(' · '):'Secuencia del '+Q.tren)+ret, extra:{sqa:1, tren:Q.tren, k:i, tipo:'antes'}});
+    if(A.tocaAv&&t>y+0.5) out.push({id:SQA_ID+i*2+1, at:sqaFecha(t), title:(toca.length?'🔔 '+nom+' · toca:':'🚉 '+(sale?'Salís de ':'Llegáis a ')+nom+' ('+hh+')'),
+      body:toca.length?toca.join('\n'):'Abre la secuencia para ver lo que toca', actionTypeId:sale?undefined:'SQA_LLEGA', extra:{sqa:1, tren:Q.tren, k:i, tipo:'llega'}});
+  });
+  return out; }
+function sqaAvBorrar(L){ return L.getPending().then(function(r){ var ids=((r&&r.notifications)||[]).filter(function(n){ return n.id>=SQA_ID&&n.id<SQA_ID+1000; }).map(function(n){ return {id:n.id}; });
+  return ids.length?L.cancel({notifications:ids}):null; }).catch(function(){}); }
+var sqaAvListo=null;
+function sqaAvPreparar(L){ if(sqaAvListo) return sqaAvListo;
+  sqaAvListo=Promise.all([
+    L.createChannel?L.createChannel({id:SQA_CANAL, name:'Secuencia operativa', description:'Avisos de las paradas y de lo que toca según la secuencia', importance:5, visibility:1, vibration:true}).catch(function(){}):null,
+    L.registerActionTypes?L.registerActionTypes({types:[{id:'SQA_LLEGA', actions:[{id:'si', title:'✓ Sí, ya hemos llegado'},{id:'no', title:'Todavía no'}]}]}).catch(function(){}):null]);
+  // Respuesta desde el aviso (también si la app estaba cerrada)
+  try{ L.addListener('localNotificationActionPerformed', function(a){ var n=a&&a.notification, x=n&&n.extra; if(!x||!x.sqa) return; var Q=sqActual(); if(!Q||String(Q.tren)!==String(x.tren)) return;
+    var A=sqaG(), st=sqaEst(A,Q), prg=st.preg||{}; prg[x.k]=1; st.preg=prg; sqaP(A);
+    if(a.actionId==='no') sqaResp('no',x.k);
+    else if(a.actionId==='si'){ if(sqBloqueAhora(Q)<x.k) sqaPon(Q,x.k); st=sqaEst(sqaG(),Q); sqaQuita(); sqaRefresca(); }
+    else { if(x.tipo==='llega'&&sqBloqueAhora(Q)<x.k&&st.espera==null) sqaPon(Q,x.k); try{ abrirSecuencia('ahora'); }catch(e){} } }); }catch(e){}
+  return sqaAvListo; }
+// Programa (o borra) los avisos. Solo si algo ha cambiado, o cada 10 min.
+function sqaAvProgramar(forzar){ var L=sqaLN(); if(!L) return; var Q=sqActual(), A=sqaG();
+  var on=Q&&A.on&&A.avisos, lista=on?sqaAvLista(Q,A):[], firma=on?Q.tren+'|'+lista.map(function(n){ return n.id+'@'+Math.round(n.at/60000); }).join(','):'off';
+  if(!forzar&&firma===SQA.firma&&Date.now()-SQA.avT<10*60000) return; SQA.firma=firma; SQA.avT=Date.now();
+  L.checkPermissions().then(function(p){
+    if(p.display!=='granted'){ SQA.avN=-1; return sqaAvBorrar(L); }
+    return sqaAvPreparar(L).then(function(){ return sqaAvBorrar(L); }).then(function(){ if(!lista.length) return null;
+      return L.schedule({notifications:lista.map(function(n){ var o={id:n.id, title:n.title, body:n.body, largeBody:n.body, channelId:SQA_CANAL, schedule:{at:n.at, allowWhileIdle:true}, extra:n.extra};
+        if(n.actionTypeId) o.actionTypeId=n.actionTypeId; return o; })}); }).then(function(r){ SQA.avN=lista.length; SQA.avInexacta=!!(r&&r.warning); });
+  }).catch(function(){}).then(function(){ var el=document.getElementById('sqa-avest'); if(el) el.outerHTML=sqaAvEstado(); }); }
+// Pide permiso la primera vez que se abre la secuencia con los avisos puestos
+var _sqaAbrirSec=abrirSecuencia; abrirSecuencia=function(tab){ _sqaAbrirSec(tab); var L=sqaLN(), A=sqaG(); if(!L||!A.avisos||SQA.pedido) return; SQA.pedido=1;
+  L.checkPermissions().then(function(p){ if(p.display==='granted') return; return L.requestPermissions(); }).then(function(){ sqaAvProgramar(true); }).catch(function(){}); };
+function sqaAvEstado(){ var L=sqaLN(), A=sqaG(); if(!A.avisos) return '<div id="sqa-avest"></div>';
+  if(!L) return '<div id="sqa-avest" class="sqa-avest">ℹ️ Con el móvil bloqueado avisa en la app de Android (TrenTurnos o TrenTurnos V5 Servicios). En la web solo avisa con la app abierta.</div>';
+  if(SQA.avN<0) return '<div id="sqa-avest" class="sqa-avest no">⚠️ Sin permiso de notificaciones: actívalas para esta app en los ajustes de Android.</div>';
+  return '<div id="sqa-avest" class="sqa-avest">📱 <b>'+SQA.avN+' aviso'+(SQA.avN===1?'':'s')+' programado'+(SQA.avN===1?'':'s')+'</b> en el móvil: suenan aunque esté bloqueado.'+(SQA.avInexacta?'<br>⚠️ Android puede retrasarlos unos minutos. <a href="#" onclick="sqaExacta();return false">Permitir hora exacta</a>':'')+'</div>'; }
+window.sqaExacta=function(){ var L=sqaLN(); if(L&&L.changeExactNotificationSetting) L.changeExactNotificationSetting().then(function(){ sqaAvProgramar(true); }).catch(function(){}); };
+function sqaAjAvisosHTML(A){ var sw=function(k,t,d){ return '<button class="sqa-sw" onclick="sqaAjuste(\''+k+'\')"><span>'+t+'<small>'+d+'</small></span><i class="'+(A[k]?'on':'')+'"></i></button>'; };
+  return '<div class="sqa-sub">🔔 Avisos con el móvil bloqueado</div>'+sw('avisos','Avisos con el móvil bloqueado','Como la alarma inteligente de TrenTurnos')+
+    (A.avisos?'<div class="sqa-lbl">Avisar antes de cada parada</div><div class="sqa-seg">'+[0,3,5,10].map(function(m){ return '<button class="'+(A.antes===m?'on':'')+'" onclick="sqaAntes('+m+')">'+(m?m+' min':'No')+'</button>'; }).join('')+'</div>'+
+      sw('tocaAv','Avisar de lo que toca','Al llegar: desayuno, aperitivo, cortesía, bar móvil…')+sw('soloTA','Solo lo mío (TA)','Sin las tareas de cafetería (TCF)')+sqaAvEstado()+
+      '<button class="sqa-prueba" onclick="sqaAvPrueba()">🔔 Probar un aviso (llega en 10 s: bloquea el móvil)</button>':''); }
+window.sqaAntes=function(m){ var A=sqaG(); A.antes=m; sqaP(A); sqaAvProgramar(true); pintarSecuencia(); };
+window.sqaAvPrueba=function(){ var L=sqaLN(); if(!L){ toast('Los avisos con el móvil bloqueado van en la app de Android'); return; }
+  L.checkPermissions().then(function(p){ return p.display==='granted'?p:L.requestPermissions(); }).then(function(p){ if(!p||p.display!=='granted'){ toast('⚠️ Activa las notificaciones de esta app en Android'); return; }
+    return sqaAvPreparar(L).then(function(){ return L.schedule({notifications:[{id:SQA_ID+999, title:'🚉 En 5 min llegáis a Córdoba (prueba)', body:'Así te llegarán los avisos de la secuencia', channelId:SQA_CANAL, schedule:{at:new Date(Date.now()+10000), allowWhileIdle:true}}]}); })
+      .then(function(){ toast('🔔 En 10 s llega un aviso de prueba'); }); }).catch(function(){ toast('⚠️ No se pudo programar el aviso'); }); };
+// Al cambiar un ajuste de avisos, se reprograma
+var _sqaAj=window.sqaAjuste; window.sqaAjuste=function(k){ _sqaAj(k); if(['avisos','tocaAv','soloTA','on'].indexOf(k)>-1) sqaAvProgramar(true); };
+document.addEventListener('visibilitychange', function(){ if(document.hidden) sqaAvProgramar(true); });
+(function(){ var s=document.createElement('style'); s.textContent=
+ '.sqa-sub{font-weight:900;font-size:13.5px;margin:12px 0 6px}.sqa-lbl{font-size:11.5px;color:var(--tx2);font-weight:700;margin:4px 0 5px}'+
+ '.sqa-seg{display:flex;gap:6px;margin-bottom:8px}.sqa-seg button{flex:1;background:var(--s2);border:1px solid var(--div);color:var(--tx);border-radius:10px;padding:8px 0;font:inherit;font-weight:800;cursor:pointer}.sqa-seg button.on{border-color:#F59E0B;color:#FCD34D;background:#2A1C05}'+
+ '.sqa-avest{font-size:11.5px;line-height:1.45;color:#86EFAC;margin:4px 2px 8px}.sqa-avest.no{color:#FCA5A5}.sqa-avest a{color:#FCD34D;font-weight:800}'+
+ '.sqa-prueba{width:100%;background:transparent;border:1px dashed var(--div);color:var(--tx2);border-radius:10px;padding:9px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}';
+ document.head.appendChild(s); })();
+setTimeout(function(){ sqaAvProgramar(true); }, 2500);
 
 /* SOLO VERSIÓN DE PRUEBA: botón para probar con otra hora (no va en la app oficial) */
 (function(){ var b=document.createElement('button'); b.id='sqa-reloj-prueba';
