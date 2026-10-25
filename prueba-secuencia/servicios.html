@@ -3927,6 +3927,32 @@ var _sqpTick=sqaTick; sqaTick=function(){ _sqpTick(); try{ if(document.querySele
  '.sqp-auto{background:#052e1a;border:1px solid #16A34A;color:#86EFAC;border-radius:14px;padding:11px 13px;font-size:13.5px;line-height:1.45;margin:4px 0 10px}.sqp-auto b{color:#fff}'+
  '.sqp-auto.sin{background:#2A1C05;border-color:#F59E0B;color:#FCD34D;margin-bottom:6px}';
  document.head.appendChild(s); })();
+/* ═══ NUEVO — Tren acoplado y aviso cuando Renfe no da datos ═══
+   Algunos trenes van acoplados a otro (p. ej. el 3991 de Málaga con el 3931 de Sevilla desde
+   Córdoba) y Renfe solo da los datos con el otro número. Si Renfe no tiene el tren, se usa el
+   retraso del acoplado; si tampoco, se avisa claro de que va por el horario de la ficha. */
+var SQA_ACOPLE={'3991':['3931']};
+SQA.sinDatos={};
+function sqaPideTren(n){ return fetch(SQA_PROXY+'?tren='+n+'&v='+Date.now()).then(function(r){ return r.json(); }).then(function(j){ var t=j&&j.tren;
+  if(!t||t.ultRetraso==null||t.ultRetraso==='') return null; var m=+t.ultRetraso; return isNaN(m)||Math.abs(m)>600?null:m; }); }
+sqaRenfe=function(){ var Q=sqActual(), A=sqaG(); if(!Q||!A.on||!A.renfe||document.hidden) return; if(Date.now()-SQA.pide<55000) return; SQA.pide=Date.now();
+  var otros=(SQA_ACOPLE[Q.tren]||[]).slice();
+  function guarda(m,con){ var A=sqaG(), st=sqaEst(A,Q); st.ren={min:m, t:Date.now(), con:con||null}; delete SQA.sinDatos[Q.tren]; sqaP(A); sqaTick(); }
+  function prueba(){ var n=otros.shift(); if(!n){ SQA.sinDatos[Q.tren]=Date.now(); sqaRefresca(); return; }
+    sqaPideTren(n).then(function(m){ if(m==null) return prueba(); guarda(m,n); }).catch(function(){}); }
+  sqaPideTren(Q.tren).then(function(m){ if(m==null) return prueba(); guarda(m); }).catch(function(){}); };
+// En el recuadro de la secuencia: de dónde sale el retraso
+var _sqaCajaA=sqaCaja; sqaCaja=function(Q){ var h=_sqaCajaA(Q), A=sqaG(); if(!A.on) return h; var st=sqaEst(A,Q), r=sqaRetraso(A,st);
+  if(r.de==='renfe'&&st.ren&&st.ren.con) h=h.replace('📡 Renfe en directo','📡 Renfe en directo · va acoplado al '+st.ren.con);
+  else if(r.de==='ultimo'&&st.ren&&st.ren.con) h=h.replace('📡 último dato de Renfe','📡 último dato de Renfe (acoplado al '+st.ren.con+')');
+  if(SQA.sinDatos[Q.tren]&&r.de!=='renfe') h='<div class="sqa-sind">⚠️ <b>Renfe no da datos del '+Q.tren+' ahora</b>'+((SQA_ACOPLE[Q.tren]||[]).length?' (ni del '+SQA_ACOPLE[Q.tren].join(', ')+', con el que va acoplado)':'')+
+    ': voy por '+(r.de==='horario'?'el horario de la ficha':'el último retraso que tenía')+'. Si vais con retraso, pon la hora de llegada.</div>'+h.replace('<b>Automático · en hora</b>','<b>Automático · sin datos de retraso</b>');
+  return h; };
+// En el plano, lo mismo en la línea de «Automático»
+var _sqpPlanoA=sqpPlano; sqpPlano=function(){ _sqpPlanoA(); var el=document.getElementById('sqp-auto'), Q=sqpQ(); if(!el||!Q) return; var A=sqaG(), st=sqaEst(A,Q);
+  if(st.ren&&st.ren.con&&sqaRetraso(A,st).de==='renfe') el.innerHTML=el.innerHTML.replace('Renfe en directo','Renfe en directo · acoplado al '+st.ren.con);
+  else if(SQA.sinDatos[Q.tren]) el.innerHTML=el.innerHTML.replace('<b>⏳ Sin señal de Renfe</b>','<b>⚠️ Renfe no da datos del '+Q.tren+'</b>'); };
+(function(){ var s=document.createElement('style'); s.textContent='.sqa-sind{background:#3B0A0A;border:1px solid #F87171;color:#FECACA;border-radius:12px;padding:9px 11px;font-size:12.5px;line-height:1.4;margin:10px 0 0}.sqa-sind b{color:#fff}'; document.head.appendChild(s); })();
 
 /* SOLO VERSIÓN DE PRUEBA: botón para probar con otra hora (no va en la app oficial) */
 (function(){ var b=document.createElement('button'); b.id='sqa-reloj-prueba';
