@@ -37935,7 +37935,7 @@ function vacPintar(){ var box=document.getElementById('vac-card'); if(!box) retu
   var todas=Object.keys(d).every(function(k){ return k<hoyK; });
   if(todas) h+='<div class="vac-ok">✅ Las 3 quincenas de '+A+' ya disfrutadas'+(v.pubs[A+1]?'':' · las de '+(A+1)+' saldrán con la nueva publicación')+'</div>';
   h+=v.cal[A]?'<button class="vac-b vac-bok" onclick="vacQuitarCal('+A+')">✓ En tu calendario · quitar</button>':'<button class="vac-b vac-bv" onclick="vacCargarCal('+A+')">📅 Cargar en calendario</button>';
-  h+='<button class="vac-b vac-bm" onclick="vacApuntar('+A+')">🔁 Apuntar un cambio que ya hice</button><button class="vac-b vac-bg" style="opacity:.55" onclick="toast(\'📣 El tablón de cambios con compañeros llega en la próxima prueba\')">📣 Buscar cambio con compañeros · pronto</button>';
+  h+='<button class="vac-b vac-bm" onclick="vacApuntar('+A+')">🔁 Apuntar un cambio que ya hice</button><button class="vac-b vac-bg" onclick="vacTablon('+A+')">📣 Buscar cambio con compañeros</button>';
   h+='<div class="vac-2"><button class="vac-b vac-bo" onclick="vacCuadro('+A+')">🔁 Cuadro de rotaciones</button><button class="vac-b vac-bo" onclick="vacQuien('+A+')">👥 ¿Quién está de vacaciones?</button></div>';
   if(!v.pubs[A+1]) h+='<button class="vac-b vac-bp" onclick="vacPrevision('+A+')">⏳ Previsión '+(A+1)+' (estimada)'+(v.prev&&v.prev.en&&v.prev.anio===A+1?' · en tu calendario':'')+'</button>';
   box.innerHTML=h+vacPie(); }
@@ -38055,6 +38055,120 @@ function vacCambioVer(A,id){ var c=vacCambios(A).filter(function(x){ return x.id
 function vacCambioBorrar(A,id){ if(!confirm('¿Borrar este cambio? Tus vacaciones vuelven a las fechas del PDF.')) return;
   var v=vacG(); v.camb=v.camb||{}; v.camb[A]=(v.camb[A]||[]).filter(function(c){ return c.id!==id; }); vacS(v);
   if(v.cal[A]) vacCargarCal(A,true); vacCerrar(); vacPintar(); if(typeof renderCal==='function') renderCal(); toast('Cambio borrado'); }
+
+/* ── Tablón de cambios con compañeros (maqueta 5–7) ──
+   Se guarda en Supabase con las funciones vc_* (ver supabase-cambios-vacaciones.sql).
+   Publicas qué das y qué buscas → los compañeros de tu base dicen «Me interesa» y ofrecen
+   sus días → aceptas una oferta → «acordado» → la empresa lo aprueba → se apunta solo como
+   cambio en las vacaciones de los dos (cada móvil apunta su parte al abrir el tablón). */
+var vacTP=null, vacTabDat=null, vacTabErr='';
+function vacYo(pub){ var f=vacMia(pub); return {mat:String(AJ.matricula||'').trim(),nombre:f&&f.nom?vacNombre(f.nom):(AJ.nombre||'Compañero'),rot:f?f.rot:''}; }
+function vacSede(pub){ return _baseSlug(_sedeUsuarioActual())||_baseSlug(pub&&pub.sede||''); }
+async function vacRpc(fn,args){ if(!sbAdmin) throw new Error('No hay conexión.');
+  var r=await sbAdmin.rpc(fn,args); if(r.error){ var m=r.error.message||''; if(/function|does not exist|schema cache/i.test(m)&&/vc_/.test(m)) throw new Error('Falta preparar el tablón en el servidor (SQL de cambios de vacaciones).'); throw new Error(m); } return r.data; }
+async function vacTabCargar(A){ var pub=vacG().pubs[A], yo=vacYo(pub);
+  if(!yo.mat){ throw new Error('Pon tu matrícula en Ajustes.'); }
+  var d=await vacRpc('vc_listar',{p_sede:vacSede(pub),p_anio:A,p_mat:yo.mat}); vacTabDat={A:A,cambios:(d&&d.cambios)||[],t:Date.now()};
+  vacTabAplicar(A); return vacTabDat; }
+// Los aprobados en los que participas se apuntan solos en tus vacaciones (una vez)
+function vacTabAplicar(A){ var v=vacG(), pub=v.pubs[A], f=vacMia(pub), yo=vacYo(pub); if(!f||!vacTabDat) return; v.camb=v.camb||{}; var L=v.camb[A]=v.camb[A]||[], n=0;
+  vacTabDat.cambios.forEach(function(c){ if(c.estado!=='aprobada'||!c.acuerdo) return; if(L.some(function(x){ return x.tablon===c.id; })) return;
+    var mio=c.mat===yo.mat, dio=mio?c.da:c.acuerdo.ofrece, rec=mio?c.acuerdo.ofrece:c.da, con=mio?c.acuerdo.nombre+(c.acuerdo.rot?' · Rotación '+c.acuerdo.rot:''):c.nombre+(c.rot?' · Rotación '+c.rot:'');
+    var qi=0; f.q.forEach(function(q,j){ if(vacDiasQ(pub,A,f.rot,q).indexOf(dio[0])>-1) qi=j; });
+    L.push({id:Date.now()+n,qi:qi,dioK:dio.slice().sort(),recK:rec.slice().sort(),con:con,tablon:c.id}); n++; });
+  if(n){ vacS(v); if(v.cal[A]) vacCargarCal(A,true); if(typeof renderCal==='function') renderCal(); vacPintar(); toast('✅ '+n+' cambio(s) aprobado(s) apuntado(s) en tus vacaciones'); } }
+function vacBuscaTxt(b){ if(!b||b==='cualquiera') return 'cualquier fecha'; var m=/^mes:(\d+)$/.exec(b); return m?'algo en '+MESES[+m[1]-1].toLowerCase():b; }
+function vacEstTag(c,yo){ var e=c.estado; return e==='aprobada'?'<span class="vac-et ok">✓ Aprobado</span>':e==='acordada'?'<span class="vac-et ac">🤝 Acordado</span>':e==='retirada'?'<span class="vac-et re">Retirado</span>':''; }
+async function vacTablon(A,filtro){ vacOv('CAMBIOS PUBLICADOS','Cargando…','<div class="vac-nota">Cargando el tablón…</div>');
+  try{ await vacTabCargar(A); vacTabErr=''; }catch(e){ vacTabErr=e.message||String(e); }
+  vacTabPinta(A,filtro); }
+var vacTabFil='todos';
+function vacTabPinta(A,filtro){ if(filtro) vacTabFil=filtro; var pub=vacG().pubs[A], yo=vacYo(pub), h='';
+  if(vacTabErr){ vacOv('CAMBIOS PUBLICADOS',(pub.sede?vacCap(pub.sede)+' · ':'')+A,'<div class="vac-card"><div class="vac-sub">⚠️ '+limpioV(vacTabErr)+'</div></div><button class="vac-b vac-bg" onclick="vacTablon('+A+')">🔄 Reintentar</button>'); return; }
+  var C=vacTabDat.cambios, mios=C.filter(function(c){ return c.mat===yo.mat&&c.estado!=='retirada'; }), ofr=C.filter(function(c){ return c.mat!==yo.mat&&c.mi_interes; }),
+      otros=C.filter(function(c){ return c.mat!==yo.mat&&c.estado==='activa'&&!c.mi_interes; });
+  var fil=function(c){ var n=c.da.length; return vacTabFil==='todos'||(vacTabFil==='7'&&n===7)||(vacTabFil==='8'&&n===8)||(vacTabFil==='15'&&n>=13); };
+  h+='<button class="vac-b vac-bv" onclick="vacPublicar('+A+')">📣 Publicar lo que doy</button>';
+  if(mios.length) h+='<div class="vac-cnt">TUS CAMBIOS</div>'+mios.map(function(c){
+    var ac=c.estado!=='activa', ni=+c.n_interes||0;
+    return '<div class="vac-of mio"><div class="k"><b>Das '+vacListaTxt(c.da)+'</b><span class="vac-tg2">'+c.da.length+' días</span></div>Buscas <b>'+limpioV(vacBuscaTxt(c.busca))+'</b>'+vacEstTag(c,yo)+
+      (ac&&c.acuerdo?'<div class="acc"><span class="si" onclick="vacAcuerdo('+A+',\''+c.id+'\')">🤝 Ver acuerdo con '+limpioV(c.acuerdo.nombre.split(' ')[0])+'</span></div>':
+       '<div class="acc"><span class="'+(ni?'si':'no')+'" onclick="vacOfertas('+A+',\''+c.id+'\')">'+(ni?'💬 '+ni+' compañero'+(ni>1?'s':'')+' interesado'+(ni>1?'s':''):'Nadie interesado todavía')+'</span><span class="no" onclick="vacRetirar('+A+',\''+c.id+'\')">Retirar</span></div>')+'</div>'; }).join('');
+  if(ofr.length) h+='<div class="vac-cnt">TUS OFERTAS</div>'+ofr.map(function(c){ var i=c.mi_interes, est=c.acuerdo&&c.acuerdo.id===i.id?(c.estado==='aprobada'?'<span class="vac-et ok">✓ Aprobado</span>':'<span class="vac-et ac">🤝 Aceptada</span>'):i.estado==='rechazada'?'<span class="vac-et re">No aceptada</span>':'<span class="vac-et pe">⏳ Esperando respuesta</span>';
+    return '<div class="vac-of"><div class="k"><b>'+limpioV(c.nombre)+' · Rot. '+limpioV(c.rot||'')+'</b>'+est+'</div>Da <b>'+vacListaTxt(c.da)+'</b> · tú ofreces <b>'+vacListaTxt(i.ofrece)+'</b>'+
+      '<div class="acc">'+(c.acuerdo&&c.acuerdo.id===i.id?'<span class="si" onclick="vacAcuerdo('+A+',\''+c.id+'\')">🤝 Ver acuerdo</span>':'')+(c.estado!=='aprobada'?'<span class="no" onclick="vacRetirarInteres('+A+',\''+i.id+'\')">Retirar mi oferta</span>':'')+'</div></div>'; }).join('');
+  h+='<div class="vac-cnt">DE TUS COMPAÑEROS · '+otros.length+'</div><div class="vac-chips">'+[['todos','Todos'],['7','7 días'],['8','8 días'],['15','Quincena']].map(function(x){ return '<span class="'+(vacTabFil===x[0]?'on':'')+'" onclick="vacTabPinta('+A+',\''+x[0]+'\')">'+x[1]+'</span>'; }).join('')+'</div>';
+  var ot=otros.filter(fil); h+=ot.length?ot.map(function(c){ var n=c.da.length;
+    return '<div class="vac-of"><div class="k"><b>'+limpioV(c.nombre)+' · Rotación '+limpioV(c.rot||'')+'</b><span class="vac-tg2 '+(n===8?'t8':'')+'">'+n+' días</span></div>Da <b>'+vacListaTxt(c.da)+'</b> · busca <b>'+limpioV(vacBuscaTxt(c.busca))+'</b>'+(c.nota?'<div class="vac-sub">“'+limpioV(c.nota)+'”</div>':'')+
+      '<div class="acc"><span class="si" onclick="vacInteres('+A+',\''+c.id+'\')">💬 Me interesa</span></div></div>'; }).join(''):'<div class="vac-nota">No hay cambios publicados'+(vacTabFil!=='todos'?' con ese filtro':'')+' en tu base. ¡Publica el tuyo!</div>';
+  h+='<div class="vac-nota">Se puede cambiar con compañeros de cualquier rotación: quincena por quincena, 7 por 7, 8 por 8 o 7 por 8 si los dos estáis de acuerdo.</div>';
+  vacOv('CAMBIOS PUBLICADOS',(pub.sede?vacCap(pub.sede)+' · ':'')+'vacaciones '+A,h); }
+
+/* Selector de días propios (para publicar y para ofrecer) */
+function vacMisQ(pub,f){ var RR=vacReal(pub,f); return f.q.map(function(q){ return vacDiasQ(pub,pub.anio,f.rot,q).filter(function(k){ return RR.d[k]&&!RR.cam[k]; }); }); }
+function vacTPset(k,v){ vacTP[k]=v; if(k==='qi'){ vacTP.ini=0; vacTP.selD={}; } vacTPpinta(); }
+function vacTPtog(k){ var o=vacTP.selD; if(o[k]) delete o[k]; else o[k]=1; vacTPpinta(); }
+function vacTPpick(S,pub,f){ var Q=vacMisQ(pub,f); if(!Q[S.qi]||!Q[S.qi].length){ for(var j=0;j<Q.length;j++) if(Q[j].length){ S.qi=j; break; } } var qd=Q[S.qi]||[];
+  var dias=S.len==='s'?qd.filter(function(k){ return S.selD[k]; }):(function(){ var len=S.len==='q'?qd.length:Math.min(S.len,qd.length); S.ini=Math.max(0,Math.min(S.ini,qd.length-len)); return qd.slice(S.ini,S.ini+len); })();
+  var h='<div class="vac-seg">'+f.q.map(function(q,qi){ return '<span class="'+(qi===S.qi?'on':'')+(Q[qi].length?'':' off')+'" onclick="'+(Q[qi].length?'vacTPset(\'qi\','+qi+')':'')+'">'+vacQtxt(q)+(qi===f.fes?'<small>festivos</small>':'')+'</span>'; }).join('')+'</div>'+
+    '<div class="vac-seg">'+[['q','Toda ('+qd.length+')'],[7,'7 días'],[8,'8 días'],['s','Sueltos']].map(function(o){ return '<span class="'+(S.len===o[0]?'on':'')+'" onclick="vacTPset(\'len\','+(typeof o[0]==='string'?'\''+o[0]+'\'':o[0])+')">'+o[1]+'</span>'; }).join('')+'</div>'+
+    (S.len!=='q'?'<div class="vac-lab" style="margin-top:10px">'+(S.len==='s'?'TOCA CADA DÍA':'TOCA EL PRIMER DÍA')+'</div>':'')+
+    '<div class="vac-dd">'+qd.map(function(k,i){ return '<i class="'+(dias.indexOf(k)>-1?'d':'')+'" onclick="'+(S.len==='s'?'vacTPtog(\''+k+'\')':'vacTPset(\'ini\','+i+')')+'">'+(+k.slice(8))+'</i>'; }).join('')+'</div>'+
+    '<div class="vac-dio">'+(dias.length?vacListaTxt(dias)+' · '+dias.length+' días':'Toca los días')+'</div>';
+  S.dias=dias; return h; }
+function vacPublicar(A){ vacTP={modo:'pub',A:A,qi:0,len:7,ini:0,selD:{},busca:'cualquiera',nota:''}; vacTPpinta(); }
+function vacInteres(A,id){ var c=vacTabDat.cambios.filter(function(x){ return x.id===id; })[0]; if(!c) return; vacTP={modo:'int',A:A,id:id,c:c,qi:0,len:Math.min(c.da.length,15)===c.da.length&&(c.da.length===7||c.da.length===8)?c.da.length:'q',ini:0,selD:{},nota:''}; vacTPpinta(); }
+function vacTPpinta(){ var S=vacTP, pub=vacG().pubs[S.A], f=vacMia(pub), h='', sc=(document.getElementById('vac-ov')||{}).scrollTop||0;
+  if(S.modo==='pub'){
+    h+='<div class="vac-card"><div class="vac-lab">¿QUÉ PARTE DAS?</div>'+vacTPpick(S,pub,f)+'</div>';
+    h+='<div class="vac-card"><div class="vac-lab">¿QUÉ BUSCAS A CAMBIO?</div><div class="vac-seg"><span class="'+(S.busca==='cualquiera'?'on':'')+'" onclick="vacTPset(\'busca\',\'cualquiera\')">Cualquier fecha</span><span class="'+(/^mes:/.test(S.busca)?'on':'')+'" onclick="vacTPset(\'busca\',\'mes:'+(new Date().getMonth()+1)+'\')">Un mes</span></div>'+
+      (/^mes:/.test(S.busca)?'<div class="vac-chips">'+MESES_C.map(function(m,i){ return '<span class="'+(S.busca==='mes:'+(i+1)?'on':'')+'" onclick="vacTPset(\'busca\',\'mes:'+(i+1)+'\')">'+m+'</span>'; }).join('')+'</div>':'')+
+      '<input class="vac-in" style="margin-top:8px" placeholder="Nota para tus compañeros (opcional)" value="'+limpioV(S.nota)+'" oninput="vacTP.nota=this.value"></div>';
+    h+='<button class="vac-b vac-bv" onclick="vacTPenviar()">📣 Publicar el cambio</button><div class="vac-nota">Lo verán los compañeros de tu base. Cuando alguien diga «Me interesa», te sale aquí y eliges.</div>';
+    var ov='CAMBIAR VACACIONES', sub='Lo que das de tus vacaciones '+S.A;
+  } else { var c=S.c;
+    h+='<div class="vac-card"><div class="vac-lab">'+limpioV(c.nombre).toUpperCase()+' DA</div><div class="vac-big">'+vacListaTxt(c.da)+' · '+c.da.length+' días</div><div class="vac-sub">Busca '+limpioV(vacBuscaTxt(c.busca))+(c.nota?' · “'+limpioV(c.nota)+'”':'')+'</div></div>';
+    h+='<div class="vac-card"><div class="vac-lab">¿QUÉ LE OFRECES A CAMBIO?</div>'+vacTPpick(S,pub,f);
+    if(S.dias.length&&S.dias.length!==c.da.length) h+=(Math.min(S.dias.length,c.da.length)===7&&Math.max(S.dias.length,c.da.length)===8?'<div class="vac-aviso">7 por 8: vale si los dos estáis de acuerdo.</div>':'<div class="vac-aviso">Da '+c.da.length+' días y ofreces '+S.dias.length+'.</div>');
+    else if(S.dias.length) h+='<div class="vac-okt">✓ '+c.da.length+' por '+S.dias.length+'</div>';
+    h+='<input class="vac-in" style="margin-top:8px" placeholder="Mensaje (opcional)" value="'+limpioV(S.nota)+'" oninput="vacTP.nota=this.value"></div>';
+    h+='<button class="vac-b vac-bv" onclick="vacTPenviar()">💬 Enviar mi oferta</button>';
+    var ov='ME INTERESA', sub='Cambio con '+limpioV(c.nombre); }
+  h+='<button class="vac-b vac-bg" onclick="vacTabPinta('+S.A+')">‹ Volver al tablón</button>';
+  vacOv(ov,sub,h); var o=document.getElementById('vac-ov'); if(o&&S._ab) o.scrollTop=sc; S._ab=1; }
+async function vacTPenviar(){ var S=vacTP, pub=vacG().pubs[S.A], yo=vacYo(pub);
+  if(!S.dias||!S.dias.length){ toast('Elige los días'); return; }
+  try{ if(S.modo==='pub') await vacRpc('vc_publicar',{p_sede:vacSede(pub),p_anio:S.A,p_mat:yo.mat,p_nombre:yo.nombre,p_rot:yo.rot,p_da:S.dias,p_busca:S.busca,p_nota:(S.nota||'').trim()||null});
+    else await vacRpc('vc_interes',{p_cambio:S.id,p_mat:yo.mat,p_nombre:yo.nombre,p_rot:yo.rot,p_ofrece:S.dias,p_nota:(S.nota||'').trim()||null});
+    toast(S.modo==='pub'?'✅ Cambio publicado':'✅ Oferta enviada'); vacTablon(S.A);
+  }catch(e){ toast('⚠️ '+(e.message||e)); } }
+function vacOfertas(A,id){ var c=vacTabDat.cambios.filter(function(x){ return x.id===id; })[0]; if(!c) return; var L=(c.intereses||[]).filter(function(i){ return i.estado==='pendiente'; });
+  var h='<div class="vac-card"><div class="vac-lab">TÚ DAS</div><div class="vac-big">'+vacListaTxt(c.da)+' · '+c.da.length+' días</div></div>'+
+    (L.length?L.map(function(i){ return '<div class="vac-of"><div class="k"><b>'+limpioV(i.nombre)+' · Rotación '+limpioV(i.rot||'')+'</b><span class="vac-tg2">'+i.ofrece.length+' días</span></div>Te ofrece <b>'+vacListaTxt(i.ofrece)+'</b>'+(i.nota?'<div class="vac-sub">“'+limpioV(i.nota)+'”</div>':'')+
+      '<div class="acc"><span class="si" onclick="vacAceptar('+A+',\''+i.id+'\',\''+id+'\')">✓ Aceptar</span></div></div>'; }).join(''):'<div class="vac-nota">Todavía nadie ha dicho «Me interesa».</div>')+
+    '<button class="vac-b vac-bg" onclick="vacTabPinta('+A+')">‹ Volver al tablón</button>';
+  vacOv('INTERESADOS',L.length+' oferta'+(L.length===1?'':'s'),h); }
+async function vacAceptar(A,iid,cid){ if(!confirm('¿Aceptar esta oferta? Las demás se rechazan y el cambio queda acordado.')) return;
+  try{ await vacRpc('vc_aceptar',{p_interes:iid,p_mat:vacYo(vacG().pubs[A]).mat}); await vacTabCargar(A); vacAcuerdo(A,cid); }catch(e){ toast('⚠️ '+(e.message||e)); } }
+async function vacRetirar(A,id){ if(!confirm('¿Retirar este cambio del tablón?')) return; try{ await vacRpc('vc_retirar',{p_cambio:id,p_mat:vacYo(vacG().pubs[A]).mat}); vacTablon(A); }catch(e){ toast('⚠️ '+(e.message||e)); } }
+async function vacRetirarInteres(A,id){ if(!confirm('¿Retirar tu oferta?')) return; try{ await vacRpc('vc_retirar_interes',{p_interes:id,p_mat:vacYo(vacG().pubs[A]).mat}); vacTablon(A); }catch(e){ toast('⚠️ '+(e.message||e)); } }
+function vacAcuerdo(A,id){ var c=vacTabDat.cambios.filter(function(x){ return x.id===id; })[0]; if(!c||!c.acuerdo) return; var yo=vacYo(vacG().pubs[A]), mio=c.mat===yo.mat, otro=mio?c.acuerdo.nombre:c.nombre, das=mio?c.da:c.acuerdo.ofrece, rec=mio?c.acuerdo.ofrece:c.da, ok=c.estado==='aprobada';
+  var h='<div class="vac-card"><div class="vac-antes"><div>Tú das<b>'+vacListaTxt(das)+'</b>recibes '+vacListaTxt(rec)+'</div><div>'+limpioV(otro.split(' ')[0])+' da<b>'+vacListaTxt(rec)+'</b>recibe '+vacListaTxt(das)+'</div></div></div>'+
+    '<div class="vac-paso"><i class="ok">✓</i><div><b>Los dos estáis de acuerdo</b><br>Aceptado por ti y por '+limpioV(otro.split(' ')[0])+'.</div></div>'+
+    '<div class="vac-paso"><i class="'+(ok?'ok':'pe')+'">'+(ok?'✓':'2')+'</i><div><b>'+(ok?'Aprobado por la empresa':'Pendiente de la empresa')+'</b><br>'+(ok?'Ya está apuntado en tus vacaciones.':'Presentad la solicitud de cambio. La app os da el resumen para entregarlo.')+'</div></div>'+
+    '<div class="vac-paso"><i class="'+(ok?'ok':'gr')+'">'+(ok?'✓':'3')+'</i><div><b>Aprobado</b><br>Al marcarlo como aprobado, se actualizan las vacaciones y el calendario de los dos.</div></div>'+
+    '<button class="vac-b vac-bg" onclick="vacResumenEmpresa('+A+',\''+id+'\')">📄 Resumen del cambio para la empresa</button>'+
+    (ok?'':'<button class="vac-b vac-bo" onclick="vacAprobar('+A+',\''+id+'\')">✓ Marcar como aprobado</button><button class="vac-b vac-bdel" onclick="'+(mio?'vacRetirar('+A+',\''+id+'\')':'vacRetirarInteres('+A+',\''+c.acuerdo.id+'\')')+'">Deshacer el acuerdo</button>')+
+    '<button class="vac-b vac-bg" onclick="vacTabPinta('+A+')">‹ Volver al tablón</button>'+
+    '<div class="vac-nota">La app no sustituye la aprobación de la empresa: ayuda a encontrar con quién cambiar y deja constancia del acuerdo.</div>';
+  vacOv(ok?'CAMBIO APROBADO':'CAMBIO ACORDADO','Con '+limpioV(otro)+' · '+das.length+' por '+rec.length+' días',h); }
+async function vacAprobar(A,id){ if(!confirm('¿La empresa ya ha aprobado el cambio? Se apuntará en las vacaciones de los dos.')) return;
+  try{ await vacRpc('vc_aprobar',{p_cambio:id,p_mat:vacYo(vacG().pubs[A]).mat}); await vacTabCargar(A); vacAcuerdo(A,id); }catch(e){ toast('⚠️ '+(e.message||e)); } }
+function vacResumenEmpresa(A,id){ var c=vacTabDat.cambios.filter(function(x){ return x.id===id; })[0]; if(!c||!c.acuerdo) return; var i=c.acuerdo;
+  var t='Solicitud de cambio de vacaciones '+A+'\n\n'+c.nombre+' (matrícula '+c.mat+', rotación '+(c.rot||'-')+') cede: '+vacListaTxt(c.da)+' ('+c.da.length+' días).\n'+
+    i.nombre+' (matrícula '+i.mat+', rotación '+(i.rot||'-')+') cede: '+vacListaTxt(i.ofrece)+' ('+i.ofrece.length+' días).\n\nAmbos estamos de acuerdo con el cambio.';
+  if(navigator.share){ navigator.share({title:'Cambio de vacaciones',text:t}).catch(function(){}); return; }
+  try{ navigator.clipboard.writeText(t); toast('📋 Resumen copiado'); }catch(e){ prompt('Copia el resumen:',t); } }
 
 /* ── Calendario: vista «Año» con todo lo tuyo + buscador ── */
 var vacAnioCal=null, vacBusca='';
@@ -38176,6 +38290,11 @@ async function vacBorrarAdmin(tipo){ if(!perfilAdminActual||perfilAdminActual.ro
   '.vac-antes{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--tx2,#94A3B8)}.vac-antes div{border:1px solid #334155;border-radius:10px;padding:9px}.vac-antes b{display:block;font-size:15px;color:#fff;margin:2px 0}'+
   '.vac-seg span{font-size:12.5px}.vac-mc{margin-top:8px;border:1px solid #334155;border-radius:12px;padding:8px}.vac-mch{display:flex;align-items:center;justify-content:space-between;font-weight:900;font-size:14px;margin-bottom:6px}.vac-mch b{cursor:pointer;padding:2px 12px;font-size:20px;color:#7DD3FC}'+
   '.vac-mcg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}.vac-mcg i{font-style:normal;text-align:center;font-size:13px;font-weight:800;border-radius:7px;padding:8px 0;background:rgba(148,163,184,.12);color:var(--tx,#E2E8F0);cursor:pointer}.vac-mcg i.e{background:none;cursor:default}.vac-mcg i.h{font-size:10px;color:var(--tx2,#94A3B8);padding:2px 0}.vac-mcg i.on{background:#7E22CE;color:#fff;box-shadow:inset 0 0 0 2px #C084FC}.vac-mcg i.ya{background:rgba(14,165,233,.35)}'+
+  '.vac-of{border:1px solid var(--div,#1E3350);border-radius:14px;padding:10px 12px;margin:8px 0;background:var(--s2,#132236);font-size:13px;line-height:1.45}.vac-of.mio{border-color:#F59E0B}.vac-of .k{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:2px}'+
+  '.vac-tg2{flex:none;border-radius:8px;padding:2px 7px;font-size:10.5px;font-weight:900;background:#0369A1;color:#E0F2FE}.vac-tg2.t8{background:#7C3AED;color:#EDE9FE}'+
+  '.vac-of .acc{display:flex;gap:6px;margin-top:8px}.vac-of .acc span{flex:1;text-align:center;border-radius:9px;padding:8px;font-weight:800;font-size:12.5px;cursor:pointer}.vac-of .si{background:#16A34A;color:#fff}.vac-of .no{border:1px solid #334155;color:var(--tx2,#CBD5E1)}'+
+  '.vac-et{display:inline-block;margin-left:6px;border-radius:7px;padding:2px 7px;font-size:10.5px;font-weight:900}.vac-et.ok{background:#14532D;color:#86EFAC}.vac-et.ac{background:#713F12;color:#FDE68A}.vac-et.pe{background:#1E3A8A;color:#BFDBFE}.vac-et.re{background:#334155;color:#CBD5E1}'+
+  '.vac-big{font-size:16px;font-weight:900}.vac-seg span.off{opacity:.35}.vac-paso{display:flex;gap:10px;margin:12px 4px;font-size:13px;line-height:1.4;color:var(--tx2,#CBD5E1)}.vac-paso b{color:var(--tx,#fff)}.vac-paso i{flex:none;width:24px;height:24px;border-radius:50%;font-style:normal;font-weight:900;font-size:12px;display:flex;align-items:center;justify-content:center}.vac-paso i.ok{background:#16A34A;color:#fff}.vac-paso i.pe{background:#B45309;color:#fff}.vac-paso i.gr{background:#334155;color:#94A3B8}'+
   '.vac-per em.cb{background:#7E22CE;margin-right:4px}.dc.vac-camb-c{box-shadow:inset 0 0 0 2px #A855F7!important}'+
   '.dc.vac-fes-c{background:rgba(234,88,12,.28)!important;box-shadow:inset 0 0 0 1.5px #EA580C}'+
   '.dc.vac-pv-c{background:repeating-linear-gradient(45deg,rgba(14,165,233,.30) 0 5px,rgba(14,165,233,.10) 5px 10px)!important}.dc.vac-pf-c{background:repeating-linear-gradient(45deg,rgba(234,88,12,.35) 0 5px,rgba(234,88,12,.12) 5px 10px)!important}'+
