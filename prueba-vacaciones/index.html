@@ -38091,6 +38091,95 @@ async function vacBorrarAdmin(tipo){ if(!perfilAdminActual||perfilAdminActual.ro
   setTimeout(montar,1500);
 })();
 
+/* ═══ NUEVO — Horario en acordeón (maqueta A aprobada) ═══
+   Arriba se quedan el título y «Hoy». Lo demás pasa a bloques plegables con su resumen en una
+   línea: Horario individual · Días del mes · Días Libres · Vacaciones · Otras acciones.
+   Solo uno abierto a la vez; se recuerda el último. No se crea nada nuevo: se mueven los mismos
+   elementos de siempre (mismos IDs), así que su lógica no cambia. */
+var HA_SECS=[
+  {s:'hor',ico:'📄',bg:'rgba(245,158,11,.18)',tit:'Horario individual'},
+  {s:'dias',ico:'📋',bg:'rgba(37,99,235,.18)',tit:'Días del mes'},
+  {s:'lib',ico:'🧘',bg:'rgba(124,58,237,.18)',tit:'Días Libres'},
+  {s:'vac',ico:'🏖️',bg:'rgba(14,165,233,.18)',tit:'Vacaciones'},
+  {s:'otr',ico:'⚙️',bg:'rgba(148,163,184,.15)',tit:'Otras acciones'}];
+var haLargo=false;
+function haAbierto(){ try{ return localStorage.getItem('haAbierto')||''; }catch(e){ return ''; } }
+function haTog(s){ var ab=haAbierto()===s?'':s; try{ localStorage.setItem('haAbierto',ab); }catch(e){}
+  document.querySelectorAll('.ha-ac').forEach(function(a){ a.classList.toggle('on',a.dataset.s===ab); });
+  haResumen(); var el=ab&&document.querySelector('.ha-ac[data-s="'+ab+'"]'); if(el) setTimeout(function(){ el.scrollIntoView({block:'nearest',behavior:'smooth'}); },60); }
+function haMontar(){
+  var board=document.querySelector('#p-horario .board'), wrap=document.getElementById('horario-wrap'); if(!board||!wrap||document.getElementById('ha-wrap')) return;
+  if(!document.getElementById('vac-card')) return; // espera a que esté la tarjeta de vacaciones
+  var hijos=function(sel){ return Array.prototype.slice.call(board.querySelectorAll(':scope > '+sel)); };
+  var lbls=hijos('.otras-lbl'), pasos=hijos('.paso-h'), $=function(id){ return document.getElementById(id); };
+  var grupos={
+    hor:[lbls[0],$('monthRow'),hijos('.stats')[0],lbls[1],pasos[0],pasos[1]],
+    dias:[wrap.querySelector(':scope > .legend'),$('days-horario')],
+    lib:[pasos[2]],
+    vac:[$('vac-card'),$('vac-file')],
+    otr:[hijos('.otras-grid-h')[0],$('gestionarMesesAcc')]};
+  if(lbls[2]) lbls[2].style.display='none'; // «Otras acciones» ya es un bloque
+  var ha=document.createElement('div'); ha.id='ha-wrap'; board.appendChild(ha);
+  HA_SECS.forEach(function(x){
+    var ac=document.createElement('div'); ac.className='ha-ac'; ac.dataset.s=x.s;
+    ac.innerHTML='<div class="ha-h" onclick="haTog(\''+x.s+'\')"><div class="ha-i" style="background:'+x.bg+'">'+x.ico+'</div><div class="ha-x"><b>'+x.tit+'</b><span id="ha-r-'+x.s+'"></span></div><span class="ha-tag" id="ha-t-'+x.s+'"></span><div class="ha-c">⌄</div></div><div class="ha-b"></div>';
+    var body=ac.querySelector('.ha-b'); (grupos[x.s]||[]).forEach(function(n){ if(n) body.appendChild(n); });
+    if(x.s==='dias') body.insertAdjacentHTML('beforeend','<div class="ha-mas" id="ha-mas" onclick="haLargo=!haLargo;haResumen()"></div>');
+    ha.appendChild(ac); });
+  // el último que usaste se queda abierto
+  var ab=haAbierto(); document.querySelectorAll('.ha-ac').forEach(function(a){ a.classList.toggle('on',a.dataset.s===ab); });
+  haResumen();
+}
+function haTxt(s,r,tag){ var a=document.getElementById('ha-r-'+s), b=document.getElementById('ha-t-'+s);
+  if(a&&a.textContent!==r) a.textContent=r; if(b){ b.textContent=tag||''; b.style.display=tag?'':'none'; } }
+function haResumen(){ if(!document.getElementById('ha-wrap')) return; var hoy=new Date();
+  try{ // Horario individual
+    var sub=(document.querySelector('.board-sub')||{}).textContent||'', ns=(document.getElementById('cServicio')||{}).textContent||'', hay=sub&&!/Sin horario/i.test(sub);
+    var mes=hay&&typeof horarioActualMeta!=='undefined'&&horarioActualMeta&&horarioActualMeta.mes?String(horarioActualMeta.mes):'';
+    haTxt('hor',hay?(mes?mes.charAt(0).toUpperCase()+mes.slice(1).toLowerCase()+' cargado':'Cargado')+(ns&&ns!=='–'?' · '+ns+' días de servicio':''):'Sin horario cargado · súbelo aquí',hay?'✓ Cargado':'');
+  }catch(e){}
+  try{ // Días del mes: corto = 6 días desde hoy (si es el mes actual)
+    var ds=Array.prototype.slice.call(document.querySelectorAll('#days-horario > .day')), n=ds.length, ini=0;
+    if(n&&typeof _pdfMesAnio==='function'&&typeof horarioActualMeta!=='undefined'&&horarioActualMeta){ var ma=_pdfMesAnio(horarioActualMeta.mes);
+      if(ma&&ma.anio===hoy.getFullYear()&&ma.mes===hoy.getMonth()+1) ds.forEach(function(d,i){ if(+d.dataset.dayNum===hoy.getDate()) ini=i; }); }
+    ini=Math.max(0,Math.min(ini,n-6));
+    ds.forEach(function(d,i){ d.style.display=haLargo||n<=8||(i>=ini&&i<ini+6)?'':'none'; });
+    var mas=document.getElementById('ha-mas'); if(mas){ mas.style.display=n>8?'':'none'; mas.textContent=haLargo?'Ver menos ⌃':'Ver los '+n+' días ⌄'; }
+    haTxt('dias',n?n+' días · '+(haLargo?'lista completa':'toca para ver la lista'):'Aparecen al subir tu horario individual');
+  }catch(e){}
+  try{ // Días Libres
+    var idx=typeof diasLibresPrevistosIndice==='function'?diasLibresPrevistosIndice():{}, ks=Object.keys(idx), meses={};
+    ks.forEach(function(k){ meses[k.slice(0,7)]=1; }); var ml=Object.keys(meses).sort();
+    haTxt('lib',ks.length?ml.slice(-2).map(function(m){ return MESES[+m.slice(5,7)-1]+' '+m.slice(0,4); }).join(' y ')+' cargado'+(ml.length>1?'s':'')+' · '+ks.length+' días':'El admin los publica para tu base');
+  }catch(e){}
+  try{ // Vacaciones: rotación y próxima quincena
+    var v=vacG(), an=Object.keys(v.pubs).map(Number).sort(), hk=vacK(new Date()), r='Sin cargar · busca la publicación de tu base', prox=null, rot='';
+    an.forEach(function(A){ var p=v.pubs[A], f=vacMia(p); if(!f) return; if(A<=hoy.getFullYear()||!rot) rot=f.rot;
+      f.q.forEach(function(q,qi){ var rg=vacRango(p,A,f.rot,q); if(vacK(rg[1])>=hk&&(!prox||rg[0]<prox[0])) prox=[rg[0],rg[1],qi===f.fes]; }); });
+    if(!prox&&v.prev&&v.prev.en){ var pk=Object.keys(v.prev.dias).sort(); if(pk.length){ var a=pk[0].split('-'); prox=[new Date(+a[0],+a[1]-1,+a[2]),null,false,true]; } }
+    if(an.length) r=(rot?'Rotación '+rot:'Publicación '+an[an.length-1])+(prox?' · próxima: '+(prox[3]?'≈ '+vacFmt(prox[0])+' '+prox[0].getFullYear()+' (previsión)':vacFmt(prox[0])+' – '+vacFmt(prox[1])+' '+prox[1].getFullYear()+(prox[2]?' (festivos)':'')):(an.length?' · '+an[an.length-1]+' ya disfrutadas':''));
+    haTxt('vac',r);
+  }catch(e){}
+  haTxt('otr','HTDL · cambiar rol · meses guardados');
+}
+(function(){
+  var s=document.createElement('style'); s.textContent=
+  '#ha-wrap{margin-top:12px}.ha-ac{background:var(--s2,#132236);border:1px solid var(--div,#1E3350);border-radius:16px;margin:0 0 9px;overflow:hidden}'+
+  '.ha-h{display:flex;align-items:center;gap:11px;padding:12px 13px;cursor:pointer;-webkit-tap-highlight-color:transparent}'+
+  '.ha-i{flex:none;width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px}'+
+  '.ha-x{flex:1;min-width:0}.ha-x b{display:block;font-size:15.5px;color:var(--tx,#F8FAFC)}.ha-x span{display:block;font-size:12.5px;color:var(--tx2,#94A3B8);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+  '.ha-tag{flex:none;font-size:10.5px;font-weight:900;border-radius:7px;padding:3px 7px;background:#14532D;color:#86EFAC}'+
+  '.ha-c{flex:none;color:var(--tx2,#64748B);font-size:18px;transition:transform .2s}.ha-ac.on{border-color:#F59E0B}.ha-ac.on .ha-c{color:#F59E0B;transform:rotate(180deg)}'+
+  '.ha-b{display:none;padding:2px 13px 13px;border-top:1px solid var(--div,#1E3350)}.ha-ac.on .ha-b{display:block}'+
+  '.ha-b>.otras-lbl:first-child{margin-top:10px!important}.ha-b #vac-card{margin:10px 0 0;border:0;padding:0;background:none}.ha-b #vac-card>.vac-h{display:none}'+
+  '.ha-b .legend{margin:10px 0 6px;padding:0}.ha-b #days-horario{margin:0;padding:0}.ha-mas{text-align:center;font-size:13px;font-weight:800;color:#7DD3FC;padding:10px 0 2px;cursor:pointer}';
+  document.head.appendChild(s);
+  var _haGo=goP; goP=function(n){ _haGo.apply(this,arguments); if(n==='horario'){ haMontar(); haResumen(); } };
+  var _haRA=renderAll; renderAll=function(){ var r=_haRA.apply(this,arguments); haResumen(); return r; };
+  var _haVP=vacPintar; vacPintar=function(){ _haVP.apply(this,arguments); haResumen(); };
+  setTimeout(haMontar,1700); setTimeout(haMontar,3500);
+})();
+
 </script>
 </body>
 </html>
