@@ -4463,5 +4463,70 @@ sxAhora=function(sv){
  'body.sx2 #p-mapa .seat.sx2-new .e{display:none}';
  document.head.appendChild(s); })();
 </script>
+<script>
+/* ═══ Inicio nuevo (PRUEBA) ═══
+   Tarjetas: la principal en naranja y las demás oscuras con su icono de color y ›.
+   Sin «Más opciones»: el estilo de temporada vuelve arriba (🎨) y «Borrar y empezar otro»
+   va dentro de la tarjeta del servicio. «Último servicio» reabre el que se borró (hasta 2 días). */
+function in1Ultimo(){ try{ var d=JSON.parse(localStorage.getItem(CLAVE+'_ultimo')||'null'); if(d&&d.lista&&(d.lista.length||d.manual)&&!caducado(d)) return d; }catch(e){} return null; }
+function in1Reabrir(){ var d=in1Ultimo(); if(!d) return; try{ localStorage.setItem(CLAVE, JSON.stringify(d)); }catch(e){ return; } location.reload(); }
+var _in1Borrar=borrarServicio;
+borrarServicio=function(){ try{ var d=localStorage.getItem(CLAVE); if(d) localStorage.setItem(CLAVE+'_ultimo', d); }catch(e){} return _in1Borrar(); };
+function in1Cuando(t){ var d=new Date(t), h=new Date(); h.setHours(0,0,0,0); var x=new Date(d); x.setHours(0,0,0,0);
+  var n=Math.round((h-x)/86400000); return n<=0?'hoy':n===1?'ayer':'hace '+n+' días'; }
+function in1Ruta(l){ var o={}, d={}; l.forEach(function(r){ if(r.origen) o[r.origen]=(o[r.origen]||0)+1; if(r.destino) d[r.destino]=(d[r.destino]||0)+1; });
+  var a=Object.keys(o).sort(function(x,y){ return o[y]-o[x]; })[0], b=Object.keys(d).sort(function(x,y){ return d[y]-d[x]; })[0];
+  return a&&b?sigla(estNombre(a))+' → '+sigla(estNombre(b)):''; }
+var _in1Ini=sxInicio;
+sxInicio=function(){
+  SX.mas=false;
+  _in1Ini();
+  var el=document.getElementById('sx-inicio'); if(!el) return;
+  el.classList.add('in1');
+  var m=el.querySelector('.sx-mas'); if(m) m.remove();
+  el.querySelectorAll('.sx-gbtn').forEach(function(b){ if(!b.querySelector('.in1-ch')) b.insertAdjacentHTML('beforeend','<i class="in1-ch">›</i>'); });
+  if(!cargado){
+    var u=in1Ultimo(), vie=document.getElementById('in1-ult'); if(vie) vie.remove();
+    if(u) el.insertAdjacentHTML('beforeend','<div id="in1-ult"><div class="in1-lt">ÚLTIMO SERVICIO</div><button onclick="in1Reabrir()"><b>'+limpio(u.tipo||'')+' '+limpio(u.num||'')+(in1Ruta(u.lista)?' · '+in1Ruta(u.lista):'')+'</b><span>'+in1Cuando(u.cargadoEn)+' · reabrir ›</span></button></div>');
+    return;
+  }
+  // Con servicio: la tarjeta del tren lleva los servicios y «Borrar y empezar otro»
+  var t=el.querySelector('.sx-tren');
+  if(t){
+    var S=typeof sx2Svs==='function'?sx2Svs():[], toca=S.length?sx2Toca():null;
+    if(S.length>1&&!t.querySelector('.sx-mini2')) t.insertAdjacentHTML('beforeend','<div class="sx-mini2">'+S.map(function(k){
+      var l=LISTA.filter(function(r){ return r.k===k&&subio[r.sid]!=='no'; }), s=l.filter(function(r){ return servidos[r.sid]; }).length;
+      return '<div style="background:'+COMIDAS[k].c+(k===toca?'':';opacity:.55')+'">'+COMIDAS[k].e+' '+limpio(COMIDAS[k].n)+'<b>'+s+'/'+l.length+'</b></div>'; }).join('')+'</div>');
+    if(!t.querySelector('.in1-del')) t.insertAdjacentHTML('beforeend','<button class="in1-del" onclick="borrarServicio()">🗑️ Borrar este servicio y empezar otro</button>');
+    var or=el.querySelector('.sx-or');
+    if(or&&toca&&S.length>1&&!or.querySelector('small')) or.querySelector('div').insertAdjacentHTML('beforeend','<small>Toca el '+limpio(COMIDAS[toca].n).toLowerCase()+'</small>');
+  }
+  // Orden: asientos → llegamos → secuencia
+  var sq=document.getElementById('sq-ini'), last=el.querySelector('.sx-az')||el.querySelector('.sx-or');
+  if(sq&&last&&last.nextSibling!==sq) last.parentNode.insertBefore(sq, last.nextSibling);
+};
+// Sin «Más opciones» en el inicio, el botón de borrar del modo antiguo ya no hace falta
+(function(){ var s=document.createElement('style'); s.textContent=
+ '#tema-btn.on{display:flex!important}'+
+ '#p-tren.mo-solo>#mo-borrar{display:none!important}'+
+ '#sx-inicio.in1 .sx-gbtn{position:relative;background:#132236;border:1px solid #1E3350;color:#F8FAFC;border-radius:20px;padding:15px 40px 15px 14px;font-size:19px;gap:13px;box-shadow:none}'+
+ '#sx-inicio.in1 .sx-gbtn>span:first-child{width:52px;height:52px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:26px;flex:none;background:#1E3350}'+
+ '#sx-inicio.in1 .sx-gbtn small{display:block;font-size:13px;font-weight:700;color:#94A3B8;margin-top:2px}'+
+ '#sx-inicio.in1 .sx-gbtn .in1-ch{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-style:normal;font-size:26px;color:#475569;font-weight:400}'+
+ '#sx-inicio.in1 .sx-or{background:linear-gradient(135deg,#F59E0B,#EA580C)!important;border:0;color:#1C1917!important;box-shadow:0 6px 18px rgba(234,88,12,.3)}'+
+ '#sx-inicio.in1 .sx-or small{color:#1C1917;opacity:.75}#sx-inicio.in1 .sx-or>span:first-child{background:rgba(255,255,255,.3)}#sx-inicio.in1 .sx-or .in1-ch{color:#1C1917}'+
+ '#sx-inicio.in1 .sx-gr>span:first-child{background:#14532D}'+
+ '#sx-inicio.in1 .sq-mo{background:#132236!important;border:1px solid #1E3350!important;color:#F8FAFC!important}#sx-inicio.in1 .sq-mo>span:first-child{background:#3B1F7A}#sx-inicio.in1 .sq-mo small{color:#94A3B8!important}'+
+ '#sx-inicio.in1 .sx-az{background:#1E3A8A!important;border:0;color:#fff}#sx-inicio.in1 .sx-az>span:first-child{background:rgba(255,255,255,.12)}#sx-inicio.in1 .sx-az small{color:#BFDBFE}#sx-inicio.in1 .sx-az .in1-ch{color:#93C5FD}'+
+ '#sx-inicio.in1 .sx-tren{background:#132236;border:1px solid #1E3350;border-radius:20px}'+
+ '#sx-inicio.in1 .sx-bar i{background:linear-gradient(90deg,#F59E0B,#EA580C)}'+
+ '#sx-inicio.in1 .sx-mini2{display:flex;gap:6px;margin-top:10px}#sx-inicio.in1 .sx-mini2>div{flex:1;border-radius:10px;padding:7px 9px;font-size:12.5px;font-weight:800;color:#fff;display:flex;justify-content:space-between;gap:4px}'+
+ '.in1-del{display:block;width:100%;margin-top:12px;border:0;border-top:1px solid #1E3350;background:none;padding:12px 0 0;color:#FCA5A5;font:800 14px Inter,sans-serif;cursor:pointer}'+
+ '#in1-ult{margin-top:16px}.in1-lt{font-size:11.5px;color:#64748B;font-weight:900;letter-spacing:1px;margin-bottom:8px}'+
+ '#in1-ult button{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;background:#0B1729;border:1.5px dashed #334155;border-radius:16px;padding:13px 14px;color:#F8FAFC;font:inherit;cursor:pointer;text-align:left}'+
+ '#in1-ult b{font-size:15px}#in1-ult span{font-size:13px;color:#94A3B8;font-weight:700;white-space:nowrap}';
+ document.head.appendChild(s); })();
+setTimeout(function(){ if(document.getElementById('p-tren').classList.contains('on')) sxInicio(); }, 150);
+</script>
 </body>
 </html>
