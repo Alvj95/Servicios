@@ -4326,5 +4326,142 @@ pintarSecuencia=function(){
  '.sq2-tabs button{flex:1;background:none;border:0;color:#64748B;font-weight:800;font-size:11px;font-family:inherit}.sq2-tabs button span{display:block;font-size:18px}.sq2-tabs button.on{color:#FCD34D}';
  document.head.appendChild(s); })();
 </script>
+<script>
+/* ═══ Mapa por servicios (PRUEBA) ═══
+   · Con varios servicios (desayuno → aperitivo → almuerzo → merienda → cena), solo se ve
+     normal el que toca; los siguientes salen apagados con ⏳ «aún no toca».
+   · El que toca cambia al siguiente en cuanto pase lo primero de estas dos cosas:
+     llegar a la estación donde sube la mayoría del siguiente, o terminar el actual.
+     Con un toque en la pestaña se elige a mano (vale hasta la próxima parada).
+   · «Llegamos a…» ya no apaga el mapa: los que se han bajado salen sombreados
+     con «⬇ CAMP» y los que suben en esa parada llevan la pegatina NEW. */
+var SX2_ORDEN=['des','ape','alm','mer','cen'];
+function sx2Svs(){
+  var hay={}; LISTA.forEach(function(r){ hay[r.k]=1; });
+  if(MANUAL&&MANUAL.svs&&MANUAL.svs.length) return MANUAL.svs.filter(function(k){ return hay[k]; });
+  return SX2_ORDEN.filter(function(k){ return hay[k]; });
+}
+function sx2Activo(){ return cargado&&!(MANUAL&&MANUAL.editando)&&MOVIENDO===null&&sx2Svs().length>0; }
+function sx2Cur(){ var P=sxParadas(); return P.length?Math.min(sxParadaIdx(),P.length-1):0; }
+function sx2Est(){ return sxParadas()[sx2Cur()]; }
+// Estación donde empieza un servicio: donde sube la mayoría de sus pasajeros.
+function sx2Inicio(k){ var n={}; LISTA.forEach(function(r){ if(r.k===k&&r.origen) n[r.origen]=(n[r.origen]||0)+1; });
+  var e=Object.keys(n).sort(function(a,b){ return n[b]-n[a]||rangoEst(a)-rangoEst(b); })[0]; return e; }
+function sx2Quedan(k){ var c=sx2Cur(); return LISTA.filter(function(r){ return r.k===k&&!servidos[r.sid]&&subio[r.sid]!=='no'&&rangoEst(r.destino)>c; }); }
+function sx2Auto(){
+  var S=sx2Svs(), c=sx2Cur();
+  for(var i=0;i<S.length-1;i++){
+    var sig=sx2Inicio(S[i+1]);
+    if(sx2Quedan(S[i]).length&&c<rangoEst(sig)) return S[i];
+  }
+  return S[S.length-1];
+}
+function sx2Forz(){ try{ var d=JSON.parse(localStorage.getItem(CLAVE+'_sx2')||'null'); if(d&&d.c===CARGADO_EN&&d.i===sx2Cur()&&sx2Svs().indexOf(d.k)>-1) return d.k; }catch(e){} return null; }
+function sx2Toca(){ return sx2Forz()||sx2Auto(); }
+function sx2Elegir(k){
+  try{ if(k===sx2Auto()) localStorage.removeItem(CLAVE+'_sx2'); else localStorage.setItem(CLAVE+'_sx2', JSON.stringify({c:CARGADO_EN, i:sx2Cur(), k:k})); }catch(e){}
+  pintarMapa();
+}
+function sx2Num(i){ return ['1.º','2.º','3.º','4.º','5.º'][i]||''; }
+
+/* Pestañas de servicio, arriba del mapa */
+function sx2Pestanas(){
+  var S=sx2Svs(); if(S.length<2) return '';
+  var t=sx2Toca(), it=S.indexOf(t), forz=sx2Forz();
+  return '<div class="sx2-chips">'+S.map(function(k,i){
+    var l=LISTA.filter(function(r){ return r.k===k&&subio[r.sid]!=='no'; }), s=l.filter(function(r){ return servidos[r.sid]; }).length, m=COMIDAS[k];
+    var cls=k===t?'on':i>it?'off':'prev', sub=k===t?sx2Num(i)+' servicio · ahora':i>it?'desde '+limpio(estCorto(sx2Inicio(k)))+' · aún no toca':'quedan '+sx2Quedan(k).length;
+    return '<button class="'+cls+'"'+(k===t?' style="background:'+m.c+'"':'')+' onclick="sx2Elegir(\''+k+'\')"><span class="ic">'+m.e+'</span><span class="tx"><b>'+limpio(m.n)+'</b><small>'+sub+'</small></span><em>'+(i>it?'🔒':s+'/'+l.length)+'</em></button>';
+  }).join('')+'</div>'+(forz?'<div class="sx2-forz">Elegido a mano · <button onclick="sx2Elegir(\''+sx2Auto()+'\')">volver a automático</button></div>':'');
+}
+/* Aviso de la parada en la que estamos */
+function sx2Parada(){
+  var c=sx2Cur(); if(!c) return '';
+  var e=sx2Est(), ba=0, su=0;
+  LISTA.forEach(function(r){ if(subio[r.sid]==='no') return; if(r.destino===e) ba++; if(r.origen===e) su++; });
+  return '<div class="sx2-arr">🚉 <div><b>'+limpio(estCorto(e))+'</b><span>Se bajan '+ba+' · Suben '+su+'</span></div></div>';
+}
+
+/* Asientos */
+function sx2Asientos(){
+  var w=document.getElementById('wagon'); if(!w) return;
+  if(estFiltro.est) return; // con un filtro de estación puesto a mano, se ve como siempre
+  var t=sx2Toca(), S=sx2Svs(), it=S.indexOf(t), c=sx2Cur(), e=sx2Est();
+  w.querySelectorAll('.seat').forEach(function(b){
+    var m=(b.getAttribute('onclick')||'').match(/'([^']+)'/); if(!m) return;
+    var sv=ASIENTOS[m[1]]||[]; if(!sv.length) return;
+    function bajo(r){ return c>0&&rangoEst(r.destino)<=c; }
+    function falta(r){ return rangoEst(r.origen)>c; }
+    var abordo=sv.filter(function(r){ return !bajo(r)&&!falta(r); });
+    var r=abordo.filter(function(x){ return x.k===t; })[0]||sv.filter(function(x){ return x.k===t&&falta(x); })[0]||abordo[0]||sv.filter(falta)[0]||sv[sv.length-1];
+    var vivo=subio[r.sid]!=='no', hecho=servidos[r.sid];
+    b.classList.remove('dim','sx2-wait','sx2-bajo','sx2-new');
+    // El color, el icono y el menú, los del pasajero que cuenta ahora en ese asiento
+    if(vivo&&!hecho&&!/\bsx-ok\b/.test(b.className)) b.style.background=COMIDAS[r.k].c;
+    var ei=b.querySelector('.e'); if(ei) ei.textContent=COMIDAS[r.k].e;
+    var ml=b.querySelector('.ml'), me=menuElegido(r); if(ml&&me){ ml.textContent=me.t; ml.className='ml'+(me.esp?' esp':''); }
+    var ks=S.indexOf(r.k);
+    if(bajo(r)){ b.classList.add('sx2-bajo'); b.insertAdjacentHTML('beforeend','<span class="sx2-dn">⬇ '+sigla(r.destino)+'</span>'); }
+    else if(falta(r)){ b.classList.add('sx2-wait'); b.insertAdjacentHTML('beforeend','<span class="sx2-dn up">⬆ '+sigla(r.origen)+'</span>'); }
+    else if(ks>-1&&ks!==it){ b.classList.add('sx2-wait'); if(ks>it) b.insertAdjacentHTML('beforeend','<span class="sx2-z">⏳</span>'); }
+    else if(c>0&&r.origen===e&&vivo){ b.classList.add('sx2-new'); b.insertAdjacentHTML('beforeend','<span class="sx2-nw">NEW</span>'); }
+    else if(SX.falta&&(hecho||!vivo)) b.classList.add('dim');
+  });
+}
+
+/* Enganches */
+var _sx2Pm=pintarMapa, _sx2Abriendo=false;
+pintarMapa=function(){
+  var on=sx2Activo();
+  if(on&&filtro&&sx2Svs().indexOf(filtro)>-1){ var f=filtro; filtro=null; if(!_sx2Abriendo&&sx2Svs().length>1&&f!==sx2Toca()){ try{ localStorage.setItem(CLAVE+'_sx2', JSON.stringify({c:CARGADO_EN, i:sx2Cur(), k:f})); }catch(e){} } }
+  document.body.classList.toggle('sx2', on);
+  _sx2Pm();
+  if(!on) return;
+  var sm=document.getElementById('sx-mapa'); if(sm) sm.insertAdjacentHTML('afterbegin', sx2Pestanas()+sx2Parada());
+  sx2Asientos();
+};
+var _sx2Dos=sxMapaDos; sxMapaDos=function(){ return sx2Activo()?'':_sx2Dos(); };
+var _sx2Abrir=abrirMapa; abrirMapa=function(){ _sx2Abriendo=true; try{ _sx2Abrir(); }finally{ _sx2Abriendo=false; } if(sx2Activo()){ filtro=null; pintarMapa(); } };
+sxVerSv=function(k){ SX.falta=true; estFiltro={modo:'sube', est:null}; cerrar(); abrirMapa(); sx2Elegir(k); };
+var _sx2Lleg=sxLlegamos;
+sxLlegamos=function(){
+  if(!cargado||!sx2Svs().length) return _sx2Lleg();
+  var P=sxParadas(), i=sxParadaIdx()+1; if(i>=P.length) return;
+  var antes=sx2Toca();
+  try{ localStorage.setItem(CLAVE+'_parada', JSON.stringify({c:CARGADO_EN, i:i})); localStorage.removeItem(CLAVE+'_sx2'); }catch(e){}
+  estFiltro={modo:'sube', est:null}; SX.falta=false; abrirMapa();
+  var ahora=sx2Toca(), ba=0, su=0;
+  LISTA.forEach(function(r){ if(subio[r.sid]==='no') return; if(r.destino===P[i]) ba++; if(r.origen===P[i]) su++; });
+  toast('🚉 '+estCorto(P[i])+': se bajan '+ba+' · suben '+su+(ahora!==antes?' · empieza el '+COMIDAS[ahora].n.toLowerCase():''));
+};
+// La ficha del asiento abre primero el servicio que toca
+var _sx2Ahora=sxAhora;
+sxAhora=function(sv){
+  if(sv.length>1&&sx2Activo()&&!filtro){ var t=sx2Toca(), c=sx2Cur();
+    var l=sv.filter(function(r){ return r.k===t&&!(c>0&&rangoEst(r.destino)<=c); }); if(l.length) return l; }
+  return _sx2Ahora(sv);
+};
+(function(){ var s=document.createElement('style'); s.textContent=
+ '.sx2-chips{display:flex;gap:8px;margin-bottom:10px}'+
+ '.sx2-chips button{flex:1;min-width:0;display:flex;align-items:center;gap:7px;border-radius:16px;padding:10px;border:0;font-family:inherit;text-align:left;color:#F8FAFC;cursor:pointer}'+
+ '.sx2-chips .ic{font-size:22px}.sx2-chips .tx{min-width:0}.sx2-chips b{display:block;font-size:15px;font-weight:900}.sx2-chips small{display:block;font-size:10.5px;font-weight:700;opacity:.85;line-height:1.2}'+
+ '.sx2-chips em{margin-left:auto;font-style:normal;font-size:13px;font-weight:900}'+
+ '.sx2-chips .on{color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.85),0 4px 14px rgba(0,0,0,.4)}'+
+ '.sx2-chips .off{background:#132236;border:1.5px dashed #475569;opacity:.6}'+
+ '.sx2-chips .prev{background:#132236;border:1px solid #1E3350;opacity:.75}'+
+ '.sx2-forz{font-size:12px;color:#FCD34D;margin:-4px 0 10px;font-weight:700}.sx2-forz button{background:none;border:0;color:#93C5FD;font:inherit;text-decoration:underline;padding:0}'+
+ '.sx2-arr{display:flex;align-items:center;gap:10px;background:#132236;border-left:5px solid #16A34A;border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:22px}'+
+ '.sx2-arr b{display:block;font-size:16px}.sx2-arr span{display:block;font-size:13px;color:#94A3B8;font-weight:700}'+
+ 'body.sx2 #p-mapa .seat.sx2-wait{background:#1E3350!important;border:1.5px dashed #64748B!important;color:#94A3B8!important;opacity:.6;box-shadow:none}'+
+ 'body.sx2 #p-mapa .seat.sx2-wait .ml{background:#334155;color:#CBD5E1}'+
+ 'body.sx2 #p-mapa .seat.sx2-bajo{background:#334155!important;color:#64748B!important;opacity:.45;box-shadow:none;border-color:transparent}'+
+ 'body.sx2 #p-mapa .seat.sx2-bajo .ml{text-decoration:line-through;background:#475569;color:#CBD5E1}body.sx2 #p-mapa .seat.sx2-bajo .sx-t{display:none}'+
+ '.seat .sx2-dn{position:absolute;bottom:-8px;right:-4px;background:#475569;color:#F1F5F9;border-radius:7px;font-size:8.5px;font-weight:900;padding:1px 5px;line-height:13px;z-index:3;white-space:nowrap}'+
+ '.seat .sx2-dn.up{background:#1E40AF}'+
+ '.seat .sx2-z{position:absolute;top:-7px;right:-5px;font-size:12px;z-index:3}'+
+ '.seat .sx2-nw{position:absolute;top:-9px;left:-7px;background:#4ADE80;color:#052e16;font-size:9.5px;font-weight:900;border-radius:7px;padding:1px 5px;letter-spacing:.3px;box-shadow:0 1px 4px rgba(0,0,0,.45);transform:rotate(-8deg);z-index:4;line-height:1.3}'+
+ 'body.sx2 #p-mapa .seat.sx2-new .e{display:none}';
+ document.head.appendChild(s); })();
+</script>
 </body>
 </html>
