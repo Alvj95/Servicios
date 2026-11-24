@@ -4528,5 +4528,40 @@ sxInicio=function(){
  document.head.appendChild(s); })();
 setTimeout(function(){ if(document.getElementById('p-tren').classList.contains('on')) sxInicio(); }, 150);
 </script>
+<script>
+/* ═══ Asientos sin «Más opciones» (PRUEBA) ═══
+   La serie, el plano y el ciclo van en una línea pequeña bajo el título del coche,
+   con «cambiar ›» (abre la hoja de siempre). Los filtros, el embarque repetido y la
+   leyenda ya no salen. Los asientos sin menú elegido ponen «SIN ELEC.». */
+var _as3Pm=pintarMapa;
+pintarMapa=function(){
+  SX.mas=false;
+  _as3Pm();
+  var mb=document.getElementById('sx-mapa-mas'); if(mb) mb.style.display='none';
+  var w=document.getElementById('wagon'), pi=document.getElementById('plano-info'); if(!w) return;
+  var tt=w.querySelector('.wtit');
+  if(tt&&pi&&!w.querySelector('.as3-plano')){
+    var h=pi.innerHTML.replace(/<button[^>]*>[\s\S]*?<\/button>/,'').replace('Plano oficial de Renfe','Plano oficial');
+    tt.insertAdjacentHTML('afterend','<button class="as3-plano" onclick="abrirSerie()"><span>'+h+'</span><b>cambiar ›</b></button>');
+  }
+  var toca=typeof sx2Svs==='function'&&sx2Svs().length?sx2Toca():null;
+  w.querySelectorAll('.seat.has').forEach(function(b){
+    if(b.querySelector('.ml')) return;
+    var m=(b.getAttribute('onclick')||'').match(/'([^']+)'/); if(!m) return;
+    var sv=(ASIENTOS[m[1]]||[]); if(!sv.length) return;
+    var r=sv.filter(function(x){ return x.k===toca; })[0]||sv.filter(pasaEst)[0]||sv[0];
+    var t=sinAcento(r.menu||'').trim();
+    var tx=!t||/SIN ELEC|SIN PREFER|SIN POSIB/.test(t)?'SIN ELEC.':t.slice(0,10);
+    b.insertAdjacentHTML('beforeend','<span class="ml se">'+limpio(tx)+'</span>');
+  });
+};
+(function(){ var s=document.createElement('style'); s.textContent=
+ '#sx-mapa-mas{display:none!important}'+
+ '.as3-plano{display:flex;align-items:center;gap:8px;width:100%;background:#0B1729;border:1px solid #1E3350;border-radius:12px;padding:8px 10px;margin:0 0 12px;color:#CBD5E1;font:700 12.5px Inter,sans-serif;text-align:left;cursor:pointer}'+
+ '.as3-plano span{flex:1;min-width:0}.as3-plano span b{color:#F8FAFC}.as3-plano .of{color:#4ADE80;margin:0 2px}.as3-plano .ap{color:#FCD34D;margin:0 2px}'+
+ '.as3-plano>b{color:#F59E0B;font-weight:900;white-space:nowrap}'+
+ '#p-mapa .seat .ml.se{background:#CBD5E1;color:#334155}';
+ document.head.appendChild(s); })();
+</script>
 </body>
 </html>
